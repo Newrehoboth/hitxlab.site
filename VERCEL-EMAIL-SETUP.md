@@ -9,7 +9,7 @@ The `RESEND_API_KEY` is set in Vercel, but server functions might not be working
 
 In your Vercel dashboard (which I can see is open), make sure:
 
-✅ `RESEND_API_KEY` = `your_resend_api_key_here`
+✅ `RESEND_API_KEY` = `re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J`
 
 **IMPORTANT**: Click on the variable and check:
 - ✅ Is it available for **Production**?
@@ -95,7 +95,7 @@ supabase functions deploy send-purchase-email --project-ref jcnritxaulgwdeardfss
 ### Step 3: Set Resend API Key in Supabase
 
 ```bash
-supabase secrets set RESEND_API_KEY=YOUR_RESEND_API_KEY --project-ref jcnritxaulgwdeardfss
+supabase secrets set RESEND_API_KEY=re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J --project-ref jcnritxaulgwdeardfss
 ```
 
 ## Simpler Solution: Direct Resend Call from Client
@@ -172,7 +172,7 @@ const sendEmail = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer YOUR_RESEND_API_KEY',
+        'Authorization': 'Bearer re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J',
       },
       body: JSON.stringify({
         from: 'Octave <noreply@hitxlab.com.ng>',

@@ -73,7 +73,7 @@ Located in: `/src/lib/email.ts`
 3. **Check console for errors** when purchasing
 4. **Verify API key** is in `.env`:
    ```
-   RESEND_API_KEY=your_resend_api_key_here
+   RESEND_API_KEY=re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J
    ```
 
 ### Domain verification steps:

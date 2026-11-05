@@ -92,12 +92,12 @@ CREATE INDEX purchases_created_at_idx ON public.purchases(created_at DESC);
 Make sure ALL these are set:
 
 ```
-✅ RESEND_API_KEY = your_resend_api_key_here
+✅ RESEND_API_KEY = re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J
 ✅ SUPABASE_SERVICE_ROLE_KEY = [get from Supabase]
 ✅ SUPABASE_URL = https://jcnritxaulgwdeardfss.supabase.co
-✅ SUPABASE_PUBLISHABLE_KEY = your_supabase_publishable_key_here
+✅ SUPABASE_PUBLISHABLE_KEY = sb_publishable_Cz_Aiqat9O_GHZAkpFrsqQ_ZnSthm-G
 ✅ VITE_SUPABASE_URL = https://jcnritxaulgwdeardfss.supabase.co
-✅ VITE_SUPABASE_PUBLISHABLE_KEY = your_supabase_publishable_key_here
+✅ VITE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_Cz_Aiqat9O_GHZAkpFrsqQ_ZnSthm-G
 ✅ VITE_SITE_URL = https://hitxlab.com.ng
 ```
 

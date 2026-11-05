@@ -34,7 +34,7 @@ Provider: Custom SMTP
 Host: smtp.resend.com
 Port: 587
 Username: resend
-Password: YOUR_RESEND_API_KEY
+Password: re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J
 From Email: onboarding@resend.dev
 ```
 
@@ -47,7 +47,7 @@ Configure SMTP email settings:
 - Host: smtp.resend.com
 - Port: 587  
 - User: resend
-- Password: YOUR_RESEND_API_KEY
+- Password: re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J
 - From: onboarding@resend.dev
 
 Update Supabase auth settings to use this SMTP configuration.

@@ -37,15 +37,15 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_Cz_Aiqat9O_GHZAkpFrsqQ_ZnSthm-G
 VITE_SUPABASE_URL=https://jcnritxaulgwdeardfss.supabase.co
 
 # Resend (Email)
-RESEND_API_KEY=your_resend_api_key_here
+RESEND_API_KEY=re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J
 
 # Site URL
 VITE_SITE_URL=https://hitxlab.com.ng
 
 # Paystack (Live Keys)
-PAYSTACK_SECRET_KEY=your_paystack_secret_key_here
-PAYSTACK_PUBLIC_KEY=your_paystack_public_key_here
-VITE_PAYSTACK_PUBLIC_KEY=your_paystack_public_key_here
+PAYSTACK_SECRET_KEY=sk_live_8c528e95019e41dd5611a15977a05d30fcd36ebf
+PAYSTACK_PUBLIC_KEY=pk_live_e9bf7cfed2bff11590869169b377d641f6932a5a
+VITE_PAYSTACK_PUBLIC_KEY=pk_live_e9bf7cfed2bff11590869169b377d641f6932a5a
 PAYMENT_PROVIDER=paystack
 ```
 

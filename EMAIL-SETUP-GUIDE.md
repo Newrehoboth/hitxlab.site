@@ -29,7 +29,7 @@ https://supabase.com/dashboard/project/jcnritxaulgwdeardfss
 SMTP Host: smtp.resend.com
 SMTP Port: 587
 SMTP User: resend
-SMTP Password: YOUR_RESEND_API_KEY
+SMTP Password: re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J
 Sender Email: noreply@hitxlab.com.ng
 Sender Name: Octave
 ```
@@ -88,10 +88,10 @@ If you just want to test without email, you can disable email verification:
 
 Already in your `.env` file:
 ```
-RESEND_API_KEY="your_resend_api_key_here"
+RESEND_API_KEY="re_Tc8G694F_K4TSfSazxUJKMxH1n3WcgB2J"
 ```
 
-Make sure to use your actual Resend API key!
+This is correct and ready to use!
 
 ## Quick Test Commands
 
