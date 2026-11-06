@@ -14,7 +14,7 @@ const purchaseSchema = z.object({
 
 export const sendPurchaseEmailsFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => purchaseSchema.parse(d))
+  .validator(purchaseSchema)
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { sendPurchaseConfirmationEmail } = await import("./email");
@@ -117,7 +117,7 @@ const welcomeSchema = z.object({
 
 export const sendWelcomeEmailFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => welcomeSchema.parse(d))
+  .validator(welcomeSchema)
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { sendWelcomeEmail } = await import("./email");
@@ -153,7 +153,7 @@ const academyAppSchema = z.object({
 });
 
 export const submitAcademyApplicationFn = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => academyAppSchema.parse(d))
+  .validator(academyAppSchema)
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { sendAcademyApplicationEmail } = await import("./email");

@@ -12,7 +12,7 @@ const linesSchema = z.object({
 
 export const recordPurchaseFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => linesSchema.parse(d))
+  .validator(linesSchema)
   .handler(async ({ data, context }) => {
     const { recordPurchases } = await import("./payouts.server");
     const rows = await recordPurchases(context.userId, data.items, data.paymentReference);
@@ -45,25 +45,25 @@ export const getWalletFn = createServerFn({ method: "POST" })
     return { ...summary, transactions, withdrawals };
   });
 
+const savePayoutAccountSchema = z.object({
+  bankName: z.string().trim().min(2).max(80),
+  accountNumber: z.string().trim().regex(/^\d{6,20}$/, "Enter a valid account number"),
+  accountName: z.string().trim().min(2).max(120),
+});
+
 export const savePayoutAccountFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        bankName: z.string().trim().min(2).max(80),
-        accountNumber: z.string().trim().regex(/^\d{6,20}$/, "Enter a valid account number"),
-        accountName: z.string().trim().min(2).max(120),
-      })
-      .parse(d),
-  )
+  .validator(savePayoutAccountSchema)
   .handler(async ({ data, context }) => {
     const { savePayoutAccount } = await import("./payouts.server");
     return savePayoutAccount(context.userId, data);
   });
 
+const withdrawalSchema = z.object({ amount: z.number().positive().max(100_000_000) });
+
 export const requestWithdrawalFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ amount: z.number().positive().max(100_000_000) }).parse(d))
+  .validator(withdrawalSchema)
   .handler(async ({ data, context }) => {
     const { createWithdrawal } = await import("./payouts.server");
     return createWithdrawal(context.userId, data.amount);
@@ -85,48 +85,42 @@ export const adminFullOverviewFn = createServerFn({ method: "POST" })
     return getFullAdminData();
   });
 
+const adminSettleWithdrawalSchema = z.object({
+  withdrawalId: z.string().uuid(),
+  status: z.enum(["processing", "paid", "failed", "reversed"]),
+  note: z.string().max(500).nullable().optional(),
+});
+
 export const adminSettleWithdrawalFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        withdrawalId: z.string().uuid(),
-        status: z.enum(["processing", "paid", "failed", "reversed"]),
-        note: z.string().max(500).nullable().optional(),
-      })
-      .parse(d),
-  )
+  .validator(adminSettleWithdrawalSchema)
   .handler(async ({ data, context }) => {
     const { isAdminUser, settleWithdrawalAs } = await import("./payouts.server");
     if (!(await isAdminUser(context.userId))) throw new Error("Forbidden");
     return settleWithdrawalAs(data.withdrawalId, data.status, data.note ?? null);
   });
 
+const adminToggleSuspendUserSchema = z.object({
+  targetUserId: z.string().uuid(),
+  suspend: z.boolean(),
+});
+
 export const adminToggleSuspendUserFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        targetUserId: z.string().uuid(),
-        suspend: z.boolean(),
-      })
-      .parse(d),
-  )
+  .validator(adminToggleSuspendUserSchema)
   .handler(async ({ data, context }) => {
     const { isAdminUser, toggleSuspendUser } = await import("./payouts.server");
     if (!(await isAdminUser(context.userId))) throw new Error("Forbidden");
     return toggleSuspendUser(data.targetUserId, data.suspend);
   });
 
+const adminDeleteUserSchema = z.object({
+  targetUserId: z.string().uuid(),
+});
+
 export const adminDeleteUserFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        targetUserId: z.string().uuid(),
-      })
-      .parse(d),
-  )
+  .validator(adminDeleteUserSchema)
   .handler(async ({ data, context }) => {
     const { isAdminUser, deleteUserAdmin } = await import("./payouts.server");
     if (!(await isAdminUser(context.userId))) throw new Error("Forbidden");
@@ -148,35 +142,31 @@ export const listBanksFn = createServerFn({ method: "POST" })
     return listNigerianBanks();
   });
 
+const resolveAccountNameSchema = z.object({
+  accountNumber: z.string().trim().regex(/^\d{10}$/, "Account number must be 10 digits"),
+  bankCode: z.string().trim().min(2).max(10),
+});
+
 /** Resolves an account name from bank code + account number (Paystack BVN-verified). */
 export const resolveAccountNameFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        accountNumber: z.string().trim().regex(/^\d{10}$/, "Account number must be 10 digits"),
-        bankCode: z.string().trim().min(2).max(10),
-      })
-      .parse(d),
-  )
+  .validator(resolveAccountNameSchema)
   .handler(async ({ data }) => {
     const { resolveAccountName } = await import("./payouts.server");
     const name = await resolveAccountName(data.accountNumber, data.bankCode);
     return { accountName: name };
   });
 
+const connectSubaccountSchema = z.object({
+  bankCode: z.string().trim().min(2).max(10),
+  accountNumber: z.string().trim().regex(/^\d{10}$/, "Account number must be 10 digits"),
+  businessName: z.string().trim().min(2).max(120),
+});
+
 /** Creates a Paystack Subaccount for the logged-in producer and stores the code. */
 export const connectSubaccountFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) =>
-    z
-      .object({
-        bankCode: z.string().trim().min(2).max(10),
-        accountNumber: z.string().trim().regex(/^\d{10}$/, "Account number must be 10 digits"),
-        businessName: z.string().trim().min(2).max(120),
-      })
-      .parse(d),
-  )
+  .validator(connectSubaccountSchema)
   .handler(async ({ data, context }) => {
     const { createPaystackSubaccount } = await import("./payouts.server");
     return createPaystackSubaccount(
@@ -196,9 +186,11 @@ export const getSubaccountStatusFn = createServerFn({ method: "POST" })
     return getSubaccountStatus(context.userId, context.supabase);
   });
 
+const getSubaccountForBeatSchema = z.object({ beatId: z.string().uuid() });
+
 /** Returns the subaccount code for a beat's producer (for split payment at checkout). */
 export const getSubaccountForBeatFn = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ beatId: z.string().uuid() }).parse(d))
+  .validator(getSubaccountForBeatSchema)
   .handler(async ({ data }) => {
     const { getSubaccountForBeatPublic } = await import("./payouts.server");
     const subaccountCode = await getSubaccountForBeatPublic(data.beatId);
