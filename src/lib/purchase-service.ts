@@ -426,21 +426,22 @@ export interface LibraryItem {
 export async function fetchUserLibrary(userId: string): Promise<LibraryItem[]> {
   const items: LibraryItem[] = [];
 
-  // 1. Fetch from purchases + purchase_items
+  // 1. Fetch from purchases table directly (no join to purchase_items)
   try {
     const { data: purchases, error: pErr } = await (supabase as any)
       .from("purchases")
-      .select("*, purchase_items(*)")
+      .select("*")
       .eq("buyer_id", userId)
       .order("created_at", { ascending: false });
 
+    console.log("[fetchUserLibrary] Purchases query result:", purchases, pErr);
+
     if (!pErr && purchases && purchases.length > 0) {
       for (const purchase of purchases) {
-        const item = purchase.purchase_items?.[0];
         const beatId = purchase.beat_id;
 
         let coverUrl = "";
-        let producerName = item?.producer_name || "";
+        let producerName = "";
 
         const { data: beat } = await (supabase as any)
           .from("beats")
@@ -450,32 +451,30 @@ export async function fetchUserLibrary(userId: string): Promise<LibraryItem[]> {
 
         if (beat) {
           coverUrl = await resolveCoverUrl(beat.cover_url, beatId);
-          if (!producerName || producerName === "Producer") {
-            producerName = await resolveProducerName(beat.producer_id);
-          }
+          producerName = await resolveProducerName(beat.producer_id);
         } else {
           coverUrl = await resolveCoverUrl(null, beatId);
-          if (!producerName || producerName === "Producer") {
-            producerName = await resolveProducerName(purchase.producer_id);
-          }
+          producerName = await resolveProducerName(purchase.producer_id);
         }
 
         items.push({
           purchaseId: purchase.id,
           beatId: purchase.beat_id,
-          beatTitle: item?.beat_title || "Beat",
+          beatTitle: purchase.beat_title || "Beat",
           producerName: producerName || "Producer",
-          licenseName: purchase.license_name || item?.license_name || "License",
-          licenseType: purchase.license_id || item?.license_type || "basic",
-          price: purchase.amount || item?.price || 0,
+          licenseName: purchase.license_name || "License",
+          licenseType: purchase.license_id || purchase.license_type || "basic",
+          price: purchase.gross_amount || purchase.amount || 0,
           purchaseDate: purchase.purchase_date || purchase.created_at,
-          contractSnapshot: item?.contract_snapshot || "",
+          contractSnapshot: purchase.contract_snapshot || "",
           coverUrl,
         });
       }
       return items;
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error("[fetchUserLibrary] Error:", err);
+  }
 
   // 2. Fallback: fetch from orders table
   const { data: orders } = await (supabase as any)
