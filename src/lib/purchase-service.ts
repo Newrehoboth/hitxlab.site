@@ -129,12 +129,12 @@ export async function validateOwnershipAndGetDownloadUrl(
       .from("purchases")
       .select("*")
       .eq("id", purchaseId)
-      .eq("user_id", userId)
+      .or(`user_id.eq.${userId},buyer_id.eq.${userId}`)
       .maybeSingle();
 
     if (purchase) {
       beatId = purchase.beat_id;
-      licenseId = purchase.license_id;
+      licenseId = purchase.license_id || purchase.license_type;
       licenseName = purchase.license_name;
     }
   }
@@ -431,7 +431,7 @@ export async function fetchUserLibrary(userId: string): Promise<LibraryItem[]> {
     const { data: purchases, error: pErr } = await (supabase as any)
       .from("purchases")
       .select("*, purchase_items(*)")
-      .eq("user_id", userId)
+      .or(`user_id.eq.${userId},buyer_id.eq.${userId}`)
       .order("created_at", { ascending: false });
 
     if (!pErr && purchases && purchases.length > 0) {
