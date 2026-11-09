@@ -129,7 +129,7 @@ export async function validateOwnershipAndGetDownloadUrl(
       .from("purchases")
       .select("*")
       .eq("id", purchaseId)
-      .or(`user_id.eq.${userId},buyer_id.eq.${userId}`)
+      .eq("buyer_id", userId)
       .maybeSingle();
 
     if (purchase) {
@@ -431,7 +431,7 @@ export async function fetchUserLibrary(userId: string): Promise<LibraryItem[]> {
     const { data: purchases, error: pErr } = await (supabase as any)
       .from("purchases")
       .select("*, purchase_items(*)")
-      .or(`user_id.eq.${userId},buyer_id.eq.${userId}`)
+      .eq("buyer_id", userId)
       .order("created_at", { ascending: false });
 
     if (!pErr && purchases && purchases.length > 0) {
