@@ -30,56 +30,66 @@ export function CartDrawer() {
   };
 
   const processFulfillment = async (paymentReference: string) => {
-    const purchases = await recordPurchase({
-      data: {
-        paymentReference,
-        items: items.map((i) => ({ beatId: i.beat.id, licenseType: i.license.type })),
-      },
-    });
-
-    const firstItem = items[0];
-    const isSingle = items.length === 1;
-    const lastPurchaseId = purchases[purchases.length - 1]?.id ?? "";
-
-    // Receipts for buyer + sale notifications for producers
-    for (const p of purchases) {
-      sendEmails({
+    try {
+      console.log("[Checkout] Starting fulfillment for reference:", paymentReference);
+      
+      const purchases = await recordPurchase({
         data: {
-          beatId: p.beatId,
-          beatTitle: p.beatTitle,
-          producerId: p.producerId,
-          producerName:
-            items.find((i) => i.beat.id === p.beatId)?.beat.producer ?? "Producer",
-          licenseName: p.licenseName,
-          price: p.grossAmount,
-          purchaseId: p.id,
+          paymentReference,
+          items: items.map((i) => ({ beatId: i.beat.id, licenseType: i.license.type })),
         },
-      }).catch((e: unknown) => console.error("purchase email failed", e));
-    }
+      });
 
-    clear();
-    setDone(true);
+      console.log("[Checkout] Purchases recorded:", purchases);
 
-    setTimeout(() => {
-      setOpen(false);
-      setDone(false);
-      if (isSingle && firstItem) {
-        nav({
-          to: "/purchase/success",
-          search: {
-            purchaseId: lastPurchaseId,
-            beatId: firstItem.beat.id,
-            beatTitle: firstItem.beat.title,
-            producerName: firstItem.beat.producer,
-            licenseName: firstItem.license.name,
-            licenseType: firstItem.license.type,
-            price: String(firstItem.license.price),
+      const firstItem = items[0];
+      const isSingle = items.length === 1;
+      const lastPurchaseId = purchases[purchases.length - 1]?.id ?? "";
+
+      // Receipts for buyer + sale notifications for producers
+      for (const p of purchases) {
+        sendEmails({
+          data: {
+            beatId: p.beatId,
+            beatTitle: p.beatTitle,
+            producerId: p.producerId,
+            producerName:
+              items.find((i) => i.beat.id === p.beatId)?.beat.producer ?? "Producer",
+            licenseName: p.licenseName,
+            price: p.grossAmount,
+            purchaseId: p.id,
           },
-        });
-      } else {
-        nav({ to: "/dashboard/library" });
+        }).catch((e: unknown) => console.error("purchase email failed", e));
       }
-    }, 1500);
+
+      clear();
+      setDone(true);
+
+      setTimeout(() => {
+        setOpen(false);
+        setDone(false);
+        if (isSingle && firstItem) {
+          nav({
+            to: "/purchase/success",
+            search: {
+              purchaseId: lastPurchaseId,
+              beatId: firstItem.beat.id,
+              beatTitle: firstItem.beat.title,
+              producerName: firstItem.beat.producer,
+              licenseName: firstItem.license.name,
+              licenseType: firstItem.license.type,
+              price: String(firstItem.license.price),
+            },
+          });
+        } else {
+          nav({ to: "/dashboard/library" });
+        }
+      }, 1500);
+    } catch (error: any) {
+      console.error("[Checkout] Fulfillment error:", error);
+      alert(`Purchase recording failed: ${error?.message || 'Unknown error'}. Please contact support with payment reference: ${paymentReference}`);
+      throw error;
+    }
   };
 
   const checkout = async () => {
