@@ -142,16 +142,49 @@ export function useNotifications(limit = 50) {
 
   const markAllRead = useCallback(async () => {
     if (!user) return;
-    setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    await db.from("notifications").update({ is_read: true }).eq("user_id", user.id).eq("is_read", false);
-  }, [user?.id]);
+    try {
+      const { error } = await db
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", user.id)
+        .eq("is_read", false);
+      
+      if (error) {
+        console.error("Failed to mark all as read:", error);
+        throw error;
+      }
+      
+      // Only update local state if database update succeeded
+      setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch (err) {
+      console.error("markAllRead error:", err);
+      // Refresh to get actual state from DB
+      refresh();
+    }
+  }, [user?.id, refresh]);
 
   const markRead = useCallback(
     async (id: string) => {
-      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
-      await db.from("notifications").update({ is_read: true }).eq("id", id);
+      try {
+        const { error } = await db
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("id", id);
+        
+        if (error) {
+          console.error("Failed to mark as read:", error);
+          throw error;
+        }
+        
+        // Only update local state if database update succeeded
+        setItems((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+      } catch (err) {
+        console.error("markRead error:", err);
+        // Refresh to get actual state from DB
+        refresh();
+      }
     },
-    []
+    [refresh]
   );
 
   return { items, loading, error, unread, refresh, markAllRead, markRead };
