@@ -273,17 +273,17 @@ function PayoutsPage() {
             {/* ── Wallet stat cards ── */}
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[
-                { label: "Available balance", value: w?.available_balance, icon: Wallet, accent: "text-red-500" },
-                { label: "Pending earnings", value: w?.pending_balance, icon: Loader2, accent: "text-teal" },
-                { label: "Lifetime earnings", value: w?.lifetime_earnings, icon: TrendingUp, accent: "text-teal" },
-                { label: "Total withdrawn", value: w?.total_withdrawn, icon: ArrowDownToLine, accent: "text-muted-foreground" },
+                { label: "Available balance", value: w?.available_balance ?? 0, icon: Wallet, accent: "text-red-500" },
+                { label: "Pending earnings", value: w?.pending_balance ?? 0, icon: Loader2, accent: "text-teal" },
+                { label: "Lifetime earnings", value: w?.lifetime_earnings ?? 0, icon: TrendingUp, accent: "text-teal" },
+                { label: "Total withdrawn", value: w?.total_withdrawn ?? 0, icon: ArrowDownToLine, accent: "text-muted-foreground" },
               ].map((c) => (
                 <div key={c.label} className="rounded-2xl border border-white/8 bg-surface/50 p-4">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <c.icon className={`h-3.5 w-3.5 ${c.accent}`} /> {c.label}
                   </div>
                   <div className="mt-2 font-display text-xl font-bold sm:text-2xl">
-                    {fmtNaira(Number(c.value ?? 0))}
+                    {fmtNaira(Number(c.value))}
                   </div>
                 </div>
               ))}
