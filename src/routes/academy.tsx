@@ -611,10 +611,10 @@ function AcademyPage() {
             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
               <button
                 onClick={handleApplyClick}
-                disabled={applying}
+                disabled={submitting}
                 className="inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] px-8 py-4 text-lg font-bold text-black shadow-xl transition hover:brightness-110 active:scale-95 disabled:opacity-50"
               >
-                {applying ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
+                {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
                 Apply for the Next Cohort
               </button>
               <button
