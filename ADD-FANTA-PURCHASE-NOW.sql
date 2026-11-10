@@ -5,8 +5,8 @@ DECLARE
   _purchase_id uuid;
   _beat_id uuid := 'fbc5c188-9b7d-4a70-af5b-17124bd39935';
 BEGIN
-  SELECT id INTO _buyer_id FROM auth.users WHERE email = 'poshpappy@gmail.com' LIMIT 1;
-  IF _buyer_id IS NULL THEN RAISE EXCEPTION 'Buyer not found: poshpappy@gmail.com'; END IF;
+  SELECT id INTO _buyer_id FROM auth.users WHERE email = 'poshpappy1@gmail.com' LIMIT 1;
+  IF _buyer_id IS NULL THEN RAISE EXCEPTION 'Buyer not found: poshpappy1@gmail.com'; END IF;
 
   SELECT producer_id INTO _producer_id FROM beats WHERE id = _beat_id LIMIT 1;
   IF _producer_id IS NULL THEN RAISE EXCEPTION 'Beat not found'; END IF;
