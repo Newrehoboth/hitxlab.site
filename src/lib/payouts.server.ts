@@ -61,6 +61,7 @@ export async function recordPurchases(
   buyerId: string,
   lines: Array<{ beatId: string; licenseType: string }>,
   paymentReference: string,
+  userClient?: any, // authenticated supabase client - ensures RPC runs as authenticated role
 ) {
   const secretKey = process.env["PAYSTACK_SECRET_KEY"] ?? process.env["STRIPE_LIVE_API_KEY"];
   if (!secretKey) throw new Error("Payment verification is not configured");
@@ -129,7 +130,11 @@ export async function recordPurchases(
 
     const split = calculateSplit(license.price, 0);
 
-    const { data: purchase, error } = await supabaseAdmin.rpc(
+    // Use the authenticated user client for the RPC call so it runs as the
+    // 'authenticated' role (which has EXECUTE permission granted).
+    // Falls back to supabaseAdmin (service_role) if userClient not provided.
+    const rpcClient = userClient || supabaseAdmin;
+    const { data: purchase, error } = await rpcClient.rpc(
       "record_verified_marketplace_purchase",
       {
         _buyer_id: buyerId,

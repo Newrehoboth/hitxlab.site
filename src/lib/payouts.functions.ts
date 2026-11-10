@@ -15,7 +15,8 @@ export const recordPurchaseFn = createServerFn({ method: "POST" })
   .validator(linesSchema)
   .handler(async ({ data, context }) => {
     const { recordPurchases } = await import("./payouts.server");
-    const rows = await recordPurchases(context.userId, data.items, data.paymentReference);
+    // Pass context.supabase so the RPC uses the authenticated role (not anon)
+    const rows = await recordPurchases(context.userId, data.items, data.paymentReference, context.supabase);
     return rows.map((r: any) => ({
       id: r.id,
       beatId: r.beat_id,
