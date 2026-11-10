@@ -59,7 +59,15 @@ export function CartDrawer() {
             price: p.grossAmount,
             purchaseId: p.id,
           },
-        }).catch((e: unknown) => console.error("purchase email failed", e));
+        })
+          .then((result) => {
+            console.log("✅ Purchase emails sent:", result);
+          })
+          .catch((e: unknown) => {
+            console.error("❌ Purchase email failed:", e);
+            // Show alert so you know emails failed
+            alert(`⚠️ Purchase successful but email notification failed. Please contact support if you don't receive your email.`);
+          });
       }
 
       clear();
