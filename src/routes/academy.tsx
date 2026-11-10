@@ -48,139 +48,53 @@ function AcademyPage() {
   const { user } = useAuth();
   const submitApp = useServerFn(submitAcademyApplicationFn);
 
-  const [applying, setApplying] = useState(false);
-  const [showAppModal, setShowAppModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
-  const [successData, setSuccessData] = useState<{ open: boolean; ref?: string; email?: string }>({ open: false });
 
-  const [appForm, setAppForm] = useState({
+  const [form, setForm] = useState({
     fullName: "",
     email: "",
     whatsappNumber: "",
     address: "",
   });
 
-  const loadPaystackScript = (): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if ((window as any).PaystackPop) return resolve(true);
-      const script = document.createElement("script");
-      script.src = "https://js.paystack.co/v1/inline.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
-  const startPaystackPayment = async (details: {
-    fullName: string;
-    email: string;
-    whatsappNumber: string;
-    address: string;
-  }) => {
-    setApplying(true);
-    try {
-      const loaded = await loadPaystackScript();
-      if (!loaded) {
-        alert("Could not load Paystack. Please check your internet connection.");
-        setApplying(false);
-        return;
-      }
-
-      const paystackKey =
-        (import.meta as any).env?.VITE_PAYSTACK_PUBLIC_KEY ||
-        "pk_live_e9bf7cfed2bff11590869169b377d641f6932a5a";
-
-      const handler = (window as any).PaystackPop.setup({
-        key: paystackKey,
-        email: details.email,
-        amount: 850000 * 100, // ₦850,000 in kobo = 85,000,000
-        currency: "NGN",
-        ref: `acad_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-        metadata: {
-          custom_fields: [
-            { display_name: "Student Name", variable_name: "student_name", value: details.fullName },
-            { display_name: "WhatsApp Number", variable_name: "whatsapp_number", value: details.whatsappNumber },
-            { display_name: "Residential Address", variable_name: "address", value: details.address },
-          ],
-        },
-        // ⚠️ Paystack SDK does NOT support async callbacks — use sync + void IIFE
-        callback: function (response: any) {
-          setApplying(false);
-          setShowAppModal(false);
-          setSuccessData({ open: true, ref: response.reference, email: details.email });
-
-          // Fire-and-forget: save Paid status & send notification email
-          void (async () => {
-            try {
-              await submitApp({
-                data: {
-                  fullName: details.fullName,
-                  email: details.email,
-                  whatsappNumber: details.whatsappNumber,
-                  address: details.address,
-                  amount: 850000,
-                  paymentStatus: "Paid",
-                  reference: response.reference,
-                },
-              });
-            } catch (e: any) {
-              console.error("[academy] paid notification failed:", e);
-            }
-          })();
-        },
-        onClose: function () {
-          setApplying(false);
-        },
-      });
-
-      handler.openIframe();
-    } catch (err: any) {
-      console.error("[academy] Paystack error:", err);
-      alert(`Payment error: ${err?.message ?? String(err)}. Please try again or contact support.`);
-      setApplying(false);
-    }
-  };
-
-
   const handleApplyClick = () => {
-    if (user?.email && !appForm.email) {
-      setAppForm((prev) => ({ ...prev, email: user.email }));
+    if (user?.email && !form.email) {
+      setForm((prev) => ({ ...prev, email: user.email }));
     }
-    setShowAppModal(true);
+    setShowModal(true);
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!appForm.fullName.trim() || !appForm.email.trim() || !appForm.whatsappNumber.trim() || !appForm.address.trim()) {
+    if (!form.fullName.trim() || !form.email.trim() || !form.whatsappNumber.trim() || !form.address.trim()) {
       alert("Please fill out all required fields.");
       return;
     }
-
-    setApplying(true);
-
-    // 1. Send initial application email to rehobothekene@gmail.com
+    setSubmitting(true);
     try {
       await submitApp({
         data: {
-          fullName: appForm.fullName.trim(),
-          email: appForm.email.trim(),
-          whatsappNumber: appForm.whatsappNumber.trim(),
-          address: appForm.address.trim(),
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
+          whatsappNumber: form.whatsappNumber.trim(),
+          address: form.address.trim(),
           amount: 850000,
           paymentStatus: "Pending",
         },
       });
+      setShowModal(false);
+      setSubmitted(true);
     } catch (err: any) {
-      console.warn("Application submit notice:", err);
+      console.warn("Waitlist submit error:", err);
+      // Still show success - email may have gone through
+      setShowModal(false);
+      setSubmitted(true);
+    } finally {
+      setSubmitting(false);
     }
-
-    // 2. Open Paystack
-    await startPaystackPayment({
-      fullName: appForm.fullName.trim(),
-      email: appForm.email.trim(),
-      whatsappNumber: appForm.whatsappNumber.trim(),
-      address: appForm.address.trim(),
-    });
   };
   return (
     <>
@@ -230,11 +144,11 @@ function AcademyPage() {
               <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                 <button
                   onClick={handleApplyClick}
-                  disabled={applying}
+                  disabled={submitting}
                   className="inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] px-8 py-4 text-lg font-bold text-black shadow-xl transition hover:brightness-110 active:scale-95 disabled:opacity-50"
                 >
-                  {applying ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
-                  Apply for the Next Cohort
+                  {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
+                  Join the Waitlist
                 </button>
                 <button
                   onClick={() => setShowContactModal(true)}
@@ -577,11 +491,11 @@ function AcademyPage() {
               <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
                 <button
                   onClick={handleApplyClick}
-                  disabled={applying}
+                  disabled={submitting}
                   className="inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] px-8 py-4 text-lg font-bold text-black shadow-xl transition hover:brightness-110 active:scale-95 disabled:opacity-50"
                 >
-                  {applying ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
-                  Apply Now
+                  {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
+                  Join the Waitlist
                 </button>
                 <button
                   onClick={() => setShowContactModal(true)}
@@ -715,75 +629,7 @@ function AcademyPage() {
         </section>
       </main>
 
-      {/* Academy Application Form Modal */}
-      {showAppModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-lg rounded-3xl border border-white/10 bg-surface p-6 sm:p-8 shadow-2xl">
-            <button
-              onClick={() => setShowAppModal(false)}
-              className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-red-500/10 text-red-500">
-                <GraduationCap className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-display text-xl font-bold text-white">Academy Student Application</h3>
-                <p className="text-xs text-muted-foreground">Founding Cohort · ₦850,000 Program Fee</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleFormSubmit} className="mt-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Full Name <span className="text-red-500">*</span>
-                </label>
-                <div className="relative mt-1.5">
-                  <UserIcon className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    required
-                    value={appForm.fullName}
-                    onChange={(e) => setAppForm({ ...appForm, fullName: e.target.value })}
-                    placeholder="e.g. John Doe"
-                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Email Address <span className="text-red-500">*</span>
-                </label>
-                <div className="relative mt-1.5">
-                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="email"
-                    required
-                    value={appForm.email}
-                    onChange={(e) => setAppForm({ ...appForm, email: e.target.value })}
-                    placeholder="student@example.com"
-                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Phone / WhatsApp Number <span className="text-red-500">*</span>
-                  </label>
-                  <span className="text-[10px] text-emerald-400 font-semibold">Active on WhatsApp</span>
-                </div>
-                <div className="relative mt-1.5">
-                  <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="tel"
-                    required
-                    value={appForm.whatsappNumber}
-                    onChange={(e) => setAppForm({ ...appForm, whatsappNumber: e.target.value })}
+      {/* Waitlist Modal */}
                     placeholder="e.g. +234 801 234 5678"
                     className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none"
                   />
@@ -820,28 +666,74 @@ function AcademyPage() {
         </div>
       )}
 
+      {/* Waitlist Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl">
+            <button onClick={() => setShowModal(false)} className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+            <div className="mb-1 inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-red-500">
+              <GraduationCap className="h-3.5 w-3.5" /> Academy Waitlist
+            </div>
+            <h3 className="mt-3 font-display text-2xl font-bold text-white">Join the Waitlist</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Submit your details and we'll reach out when a spot opens up.
+            </p>
+            <form onSubmit={handleFormSubmit} className="mt-5 space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Full Name <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <UserIcon className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input required type="text" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} placeholder="Your full name" className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Email Address <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="your@email.com" className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                  WhatsApp Number <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input required type="tel" value={form.whatsappNumber} onChange={(e) => setForm({ ...form, whatsappNumber: e.target.value })} placeholder="e.g. +234 801 234 5678" className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Residential Address <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <MapPin className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
+                  <textarea required rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Your home or residential address" className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none resize-none" />
+                </div>
+              </div>
+              <button type="submit" disabled={submitting} className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] py-3.5 text-base font-bold text-black shadow-xl transition hover:brightness-110 disabled:opacity-50">
+                {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
+                Submit & Join Waitlist
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Contact Modal */}
       {showContactModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl text-center">
-            <button
-              onClick={() => setShowContactModal(false)}
-              className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
-            >
+            <button onClick={() => setShowContactModal(false)} className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white">
               <X className="h-5 w-5" />
             </button>
             <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-red-500/10 text-red-500">
               <MessageSquare className="h-6 w-6" />
             </div>
             <h3 className="font-display text-2xl font-bold text-white">Contact Academy</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Have questions about Hitxlab Academy or payment plans? Reach out to us directly:
-            </p>
+            <p className="mt-2 text-sm text-muted-foreground">Have questions? Reach out directly:</p>
             <div className="mt-6">
-              <a
-                href="mailto:Hitxlabng@gmail.com?subject=Hitxlab%20Academy%20Inquiry"
-                className="flex items-center justify-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-base font-bold text-white transition hover:bg-red-500/20"
-              >
+              <a href="mailto:Hitxlabng@gmail.com?subject=Hitxlab%20Academy%20Inquiry" className="flex items-center justify-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-base font-bold text-white transition hover:bg-red-500/20">
                 <Mail className="h-5 w-5 text-red-500" />
                 Hitxlabng@gmail.com
               </a>
@@ -850,26 +742,18 @@ function AcademyPage() {
         </div>
       )}
 
-      {/* Success Modal */}
-      {successData.open && (
+      {/* Waitlist submitted confirmation */}
+      {submitted && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-3xl border border-teal/30 bg-surface p-6 shadow-2xl text-center">
+          <div className="relative w-full max-w-md rounded-3xl border border-teal/30 bg-surface p-8 shadow-2xl text-center">
             <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-teal/20 text-teal">
               <CheckCircle2 className="h-8 w-8" />
             </div>
-            <h3 className="font-display text-2xl font-bold text-white">Application Received!</h3>
-            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-              Thank you for applying to Hitxlab Academy Founding Cohort. Your payment of ₦850,000 has been verified.
+            <h3 className="font-display text-2xl font-bold text-white">You're on the waitlist!</h3>
+            <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+              We've received your details. We'll reach out to you directly when a spot becomes available.
             </p>
-            {successData.ref && (
-              <div className="mt-4 rounded-xl border border-white/8 bg-white/5 p-3 text-xs font-mono text-muted-foreground">
-                Reference: <span className="text-white font-bold">{successData.ref}</span>
-              </div>
-            )}
-            <button
-              onClick={() => setSuccessData({ open: false })}
-              className="mt-6 w-full rounded-xl bg-teal py-3 text-sm font-bold text-black transition hover:brightness-110"
-            >
+            <button onClick={() => setSubmitted(false)} className="mt-6 w-full rounded-xl bg-teal py-3 text-sm font-bold text-black transition hover:brightness-110">
               Done
             </button>
           </div>

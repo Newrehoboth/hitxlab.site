@@ -15,16 +15,75 @@ import {
   Sparkles,
   KeyRound,
   CheckCircle2,
+  Send,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth, type Role } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
 import { sendWelcomeEmailFn } from "@/lib/email.functions";
+import { createServerFn } from "@tanstack/react-start";
+import { z as zod } from "zod";
 import hitxlabLogo from "@/assets/hitxlabLogo.png";
 
 const searchSchema = z.object({
   mode: z.enum(["signin", "signup"]).optional().default("signin"),
 });
+
+// Server function to send producer access request email
+const producerRequestSchema = zod.object({
+  name: zod.string().min(1),
+  email: zod.string().email(),
+  instagramOrSocial: zod.string().optional(),
+  message: zod.string().optional(),
+});
+
+export const sendProducerRequestFn = createServerFn({ method: "POST" })
+  .validator(producerRequestSchema)
+  .handler(async ({ data }) => {
+    const { Resend } = await import("resend");
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const recipients = ["bigvybzonly@gmail.com", "rehobothekene@gmail.com"];
+
+    const html = `
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:Inter,Helvetica,Arial,sans-serif;color:#f0f0f0;">
+<div style="max-width:560px;margin:40px auto;background:#13131e;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
+  <div style="background:linear-gradient(135deg,#ef4444,#dc2626);padding:28px 36px;">
+    <h1 style="margin:0;font-size:22px;font-weight:800;color:#fff;">🎧 New Producer Access Request</h1>
+    <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,0.8);">HITXLAB Beat Marketplace</p>
+  </div>
+  <div style="padding:36px;">
+    <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.85);">A producer wants to join the platform. Review their details below:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);width:140px;">Name</td><td style="padding:8px 0;font-weight:700;">${data.name}</td></tr>
+      <tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);">Email</td><td style="padding:8px 0;font-weight:700;"><a href="mailto:${data.email}" style="color:#ef4444;">${data.email}</a></td></tr>
+      ${data.instagramOrSocial ? `<tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);">Social</td><td style="padding:8px 0;">${data.instagramOrSocial}</td></tr>` : ""}
+      ${data.message ? `<tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);">About</td><td style="padding:8px 0;">${data.message}</td></tr>` : ""}
+    </table>
+    <div style="margin-top:28px;padding:16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px;">
+      <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.7);">To invite this producer, send them a signup link:</p>
+      <p style="margin:8px 0 0;font-family:monospace;font-size:13px;color:#ef4444;">https://www.hitxlab.com/auth?mode=signup&invite=producer</p>
+    </div>
+  </div>
+  <div style="padding:16px 36px;border-top:1px solid rgba(255,255,255,0.06);text-align:center;">
+    <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.3);">© ${new Date().getFullYear()} HITXLAB Inc.</p>
+  </div>
+</div></body></html>`;
+
+    for (const to of recipients) {
+      try {
+        await resend.emails.send({
+          from: "HITXLAB <noreply@hitxlab.com.ng>",
+          to,
+          subject: `🎧 Producer Access Request: ${data.name}`,
+          html,
+        });
+      } catch (e) {
+        console.error("[producer-request] email failed to", to, e);
+      }
+    }
+    return { ok: true };
+  });
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (s) => searchSchema.parse(s),
@@ -44,9 +103,10 @@ function AuthPage() {
   const nav = useNavigate();
   const { signIn, signUp, verifyOtp, resendOtp } = useAuth();
   const sendWelcome = useServerFn(sendWelcomeEmailFn);
+  const sendProducerRequest = useServerFn(sendProducerRequestFn);
   const isSignup = mode === "signup";
 
-  const [step, setStep] = useState<"role" | "form" | "verify">(isSignup ? "role" : "form");
+  const [step, setStep] = useState<"role" | "form" | "verify" | "producer-request" | "producer-sent">(isSignup ? "role" : "form");
   const [role, setRole] = useState<Role>("artist");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -56,6 +116,12 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  // Producer request form state
+  const [reqName, setReqName] = useState("");
+  const [reqEmail, setReqEmail] = useState("");
+  const [reqSocial, setReqSocial] = useState("");
+  const [reqMessage, setReqMessage] = useState("");
 
   const routeAfter = async (accountType: Role, userId: string) => {
     if (accountType === "producer") {
@@ -203,15 +269,98 @@ function AuthPage() {
           {isSignup && step === "role" && (
             <>
               <h1 className="font-display text-3xl font-bold">Choose your path</h1>
-              <p className="mt-2 text-sm text-muted-foreground">You can change this later in settings.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Artists can sign up freely. The producer store is invite-only.</p>
               <div className="mt-6 grid gap-3">
-                <RoleCard active={role === "producer"} onClick={() => setRole("producer")} icon={<Headphones className="h-5 w-5" />} title="I'm a Producer" desc="Upload beats, manage licenses, grow your audience." />
                 <RoleCard active={role === "artist"} onClick={() => setRole("artist")} icon={<Mic2 className="h-5 w-5" />} title="I'm an Artist" desc="Discover beats, follow producers, purchase licenses." />
+                <RoleCard active={role === "producer"} onClick={() => setRole("producer")} icon={<Headphones className="h-5 w-5" />} title="I'm a Producer" desc="Exclusive — submit a request to join the store." />
               </div>
-              <button onClick={() => setStep("form")} className="mt-6 h-12 w-full rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] font-semibold text-black shadow-[0_15px_35px_-10px_rgb(239_68_68/0.6)] transition hover:brightness-105">
-                Continue as {role === "producer" ? "Producer" : "Artist"}
+              <button
+                onClick={() => {
+                  if (role === "producer") {
+                    setStep("producer-request");
+                  } else {
+                    setStep("form");
+                  }
+                }}
+                className="mt-6 h-12 w-full rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] font-semibold text-black shadow-[0_15px_35px_-10px_rgb(239_68_68/0.6)] transition hover:brightness-105"
+              >
+                {role === "producer" ? "Request Access" : "Continue as Artist"}
               </button>
             </>
+          )}
+
+          {/* Producer exclusive request form */}
+          {step === "producer-request" && (
+            <>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-red-500">
+                <ShieldCheck className="h-3.5 w-3.5" /> Exclusive Producer Access
+              </div>
+              <h1 className="font-display text-2xl font-bold">Request to Join</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                The HITXLAB producer store is exclusive. Submit your details and we'll reach out if you're a good fit.
+              </p>
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!reqName.trim() || !reqEmail.trim()) return;
+                  setLoading(true);
+                  setErr(null);
+                  try {
+                    await sendProducerRequest({
+                      data: {
+                        name: reqName.trim(),
+                        email: reqEmail.trim(),
+                        instagramOrSocial: reqSocial.trim() || undefined,
+                        message: reqMessage.trim() || undefined,
+                      },
+                    });
+                    setStep("producer-sent");
+                  } catch (e: any) {
+                    setErr(e?.message ?? "Failed to send request. Try again.");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="mt-6 space-y-3"
+              >
+                <Field icon={<UserIcon className="h-4 w-4" />} placeholder="Your name or producer tag" value={reqName} onChange={setReqName} required />
+                <Field icon={<Mail className="h-4 w-4" />} type="email" placeholder="your@email.com" value={reqEmail} onChange={setReqEmail} required />
+                <Field icon={<Send className="h-4 w-4" />} placeholder="Instagram or SoundCloud link (optional)" value={reqSocial} onChange={setReqSocial} />
+                <div className="relative">
+                  <textarea
+                    value={reqMessage}
+                    onChange={(e) => setReqMessage(e.target.value)}
+                    placeholder="Tell us about your music (optional)"
+                    rows={3}
+                    className="w-full rounded-xl border border-white/10 bg-surface/60 px-4 py-3 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-red-500/40 focus:ring-4 focus:ring-red-500/15 resize-none"
+                  />
+                </div>
+                {err && <div className="rounded-lg border border-crimson/30 bg-crimson/10 px-3 py-2 text-xs text-crimson">{err}</div>}
+                <button disabled={loading || !reqName.trim() || !reqEmail.trim()} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] font-semibold text-black transition hover:brightness-105 disabled:opacity-70">
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Send Request
+                </button>
+              </form>
+              <button onClick={() => setStep("role")} className="mt-3 w-full text-center text-xs text-muted-foreground hover:text-foreground">
+                ← Back
+              </button>
+            </>
+          )}
+
+          {/* Producer request sent confirmation */}
+          {step === "producer-sent" && (
+            <div className="flex flex-col items-center text-center py-6">
+              <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-teal/10 text-teal">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
+              <h1 className="font-display text-2xl font-bold">Request Sent!</h1>
+              <p className="mt-3 text-sm text-muted-foreground max-w-xs">
+                We've received your request. If you're selected, we'll email you a signup link to complete your producer profile.
+              </p>
+              <Link to="/" className="mt-6 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold hover:bg-white/10 transition">
+                Back to marketplace
+              </Link>
+            </div>
           )}
 
           {step === "form" && (
