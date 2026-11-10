@@ -21,69 +21,12 @@ import {
 import { useAuth, type Role } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
-import { sendWelcomeEmailFn } from "@/lib/email.functions";
-import { createServerFn } from "@tanstack/react-start";
-import { z as zod } from "zod";
+import { sendWelcomeEmailFn, sendProducerRequestFn } from "@/lib/email.functions";
 import hitxlabLogo from "@/assets/hitxlabLogo.png";
 
 const searchSchema = z.object({
   mode: z.enum(["signin", "signup"]).optional().default("signin"),
 });
-
-// Server function to send producer access request email
-const producerRequestSchema = zod.object({
-  name: zod.string().min(1),
-  email: zod.string().email(),
-  instagramOrSocial: zod.string().optional(),
-  message: zod.string().optional(),
-});
-
-export const sendProducerRequestFn = createServerFn({ method: "POST" })
-  .validator(producerRequestSchema)
-  .handler(async ({ data }) => {
-    const { Resend } = await import("resend");
-    const resend = new Resend(process.env.RESEND_API_KEY);
-    const recipients = ["bigvybzonly@gmail.com", "rehobothekene@gmail.com"];
-
-    const html = `
-<!DOCTYPE html><html><body style="margin:0;padding:0;background:#0b0b12;font-family:Inter,Helvetica,Arial,sans-serif;color:#f0f0f0;">
-<div style="max-width:560px;margin:40px auto;background:#13131e;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);">
-  <div style="background:linear-gradient(135deg,#ef4444,#dc2626);padding:28px 36px;">
-    <h1 style="margin:0;font-size:22px;font-weight:800;color:#fff;">🎧 New Producer Access Request</h1>
-    <p style="margin:6px 0 0;font-size:13px;color:rgba(255,255,255,0.8);">HITXLAB Beat Marketplace</p>
-  </div>
-  <div style="padding:36px;">
-    <p style="margin:0 0 20px;font-size:15px;color:rgba(255,255,255,0.85);">A producer wants to join the platform. Review their details below:</p>
-    <table style="width:100%;border-collapse:collapse;font-size:14px;">
-      <tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);width:140px;">Name</td><td style="padding:8px 0;font-weight:700;">${data.name}</td></tr>
-      <tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);">Email</td><td style="padding:8px 0;font-weight:700;"><a href="mailto:${data.email}" style="color:#ef4444;">${data.email}</a></td></tr>
-      ${data.instagramOrSocial ? `<tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);">Social</td><td style="padding:8px 0;">${data.instagramOrSocial}</td></tr>` : ""}
-      ${data.message ? `<tr><td style="padding:8px 0;color:rgba(255,255,255,0.5);">About</td><td style="padding:8px 0;">${data.message}</td></tr>` : ""}
-    </table>
-    <div style="margin-top:28px;padding:16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px;">
-      <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.7);">To invite this producer, send them a signup link:</p>
-      <p style="margin:8px 0 0;font-family:monospace;font-size:13px;color:#ef4444;">https://www.hitxlab.com/auth?mode=signup&invite=producer</p>
-    </div>
-  </div>
-  <div style="padding:16px 36px;border-top:1px solid rgba(255,255,255,0.06);text-align:center;">
-    <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.3);">© ${new Date().getFullYear()} HITXLAB Inc.</p>
-  </div>
-</div></body></html>`;
-
-    for (const to of recipients) {
-      try {
-        await resend.emails.send({
-          from: "HITXLAB <noreply@hitxlab.com.ng>",
-          to,
-          subject: `🎧 Producer Access Request: ${data.name}`,
-          html,
-        });
-      } catch (e) {
-        console.error("[producer-request] email failed to", to, e);
-      }
-    }
-    return { ok: true };
-  });
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (s) => searchSchema.parse(s),
