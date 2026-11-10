@@ -630,43 +630,6 @@ function AcademyPage() {
       </main>
 
       {/* Waitlist Modal */}
-                    placeholder="e.g. +234 801 234 5678"
-                    className="w-full rounded-xl border border-white/10 bg-white/5 py-3 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Residential Address <span className="text-red-500">*</span>
-                </label>
-                <div className="relative mt-1.5">
-                  <MapPin className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
-                  <textarea
-                    required
-                    rows={2}
-                    value={appForm.address}
-                    onChange={(e) => setAppForm({ ...appForm, address: e.target.value })}
-                    placeholder="Enter your home or residential address"
-                    className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder-muted-foreground focus:border-red-500 focus:outline-none resize-none"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={applying}
-                className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] py-3.5 text-base font-bold text-black shadow-xl transition hover:brightness-110 disabled:opacity-50"
-              >
-                {applying ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
-                Submit & Proceed to Pay ₦850,000
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Waitlist Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl">
