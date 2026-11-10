@@ -26,6 +26,7 @@ import hitxlabLogo from "@/assets/hitxlabLogo.png";
 
 const searchSchema = z.object({
   mode: z.enum(["signin", "signup"]).optional().default("signin"),
+  invite: z.enum(["producer"]).optional(),
 });
 
 export const Route = createFileRoute("/auth")({
@@ -42,15 +43,20 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
-  const { mode } = Route.useSearch();
+  const { mode, invite } = Route.useSearch();
   const nav = useNavigate();
   const { signIn, signUp, verifyOtp, resendOtp } = useAuth();
   const sendWelcome = useServerFn(sendWelcomeEmailFn);
   const sendProducerRequest = useServerFn(sendProducerRequestFn);
   const isSignup = mode === "signup";
+  const isProducerInvite = invite === "producer";
 
-  const [step, setStep] = useState<"role" | "form" | "verify" | "producer-request" | "producer-sent">(isSignup ? "role" : "form");
-  const [role, setRole] = useState<Role>("artist");
+  // If it's a producer invite, start directly at the form step with producer role
+  const initialStep = isProducerInvite ? "form" : (isSignup ? "role" : "form");
+  const initialRole = isProducerInvite ? "producer" : "artist";
+
+  const [step, setStep] = useState<"role" | "form" | "verify" | "producer-request" | "producer-sent">(initialStep);
+  const [role, setRole] = useState<Role>(initialRole);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
@@ -182,7 +188,14 @@ function AuthPage() {
         </Link>
 
         <div className="mx-auto w-full max-w-md">
-          {step !== "verify" && (
+          {/* Show exclusive badge for producer invites */}
+          {isProducerInvite && step === "form" && (
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-red-500">
+              <ShieldCheck className="h-3.5 w-3.5" /> Exclusive Producer Invite
+            </div>
+          )}
+          
+          {step !== "verify" && !isProducerInvite && (
             <div className="mb-6 grid grid-cols-2 rounded-xl border border-white/8 bg-surface/50 p-1">
               <button
                 onClick={() => {
@@ -308,9 +321,17 @@ function AuthPage() {
 
           {step === "form" && (
             <>
-              <h1 className="font-display text-3xl font-bold">{isSignup ? "Create your account" : "Welcome back"}</h1>
+              <h1 className="font-display text-3xl font-bold">
+                {isSignup 
+                  ? (isProducerInvite ? "Create Producer Account" : "Create your account")
+                  : "Welcome back"}
+              </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                {isSignup ? "Join thousands of producers and artists on HITXLAB." : "Sign in to continue."}
+                {isSignup 
+                  ? (isProducerInvite 
+                      ? "Complete your producer profile to join HITXLAB's exclusive producer store."
+                      : "Join thousands of producers and artists on HITXLAB.")
+                  : "Sign in to continue."}
               </p>
               <form onSubmit={submit} className="mt-6 space-y-3">
                 {isSignup && (
