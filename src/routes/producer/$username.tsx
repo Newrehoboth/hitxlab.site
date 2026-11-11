@@ -14,6 +14,8 @@ import {
   ChevronRight,
   Crown,
   Sparkles,
+  X,
+  Send,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Player } from "@/components/Player";
@@ -41,6 +43,9 @@ function ProducerProfilePage() {
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [expandedBio, setExpandedBio] = useState(false);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageText, setMessageText] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
   const bioRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -207,6 +212,42 @@ function ProducerProfilePage() {
     }
   };
 
+  // Send message to producer
+  const sendMessage = async () => {
+    if (!user) {
+      alert("Please sign in to message producers");
+      return;
+    }
+    if (!messageText.trim()) {
+      alert("Please enter a message");
+      return;
+    }
+    if (!profile?.producerId) return;
+
+    setSendingMessage(true);
+    try {
+      // Insert into messages table
+      const { error } = await (supabase as any)
+        .from("direct_messages")
+        .insert({
+          sender_id: user.id,
+          receiver_id: profile.producerId,
+          message: messageText.trim(),
+        });
+
+      if (error) throw error;
+
+      alert("Message sent! The producer will see it in their dashboard.");
+      setShowMessageModal(false);
+      setMessageText("");
+    } catch (error: any) {
+      console.error("Message send error:", error);
+      alert("Could not send message. Please try again.");
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -323,7 +364,16 @@ function ProducerProfilePage() {
                   )}
                 </button>
 
-                <button className="flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white font-semibold py-2.5 rounded-xl text-sm transition active:scale-95 border border-white/5">
+                <button
+                  onClick={() => {
+                    if (!user) {
+                      alert("Please sign in to message producers");
+                      return;
+                    }
+                    setShowMessageModal(true);
+                  }}
+                  className="flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/15 text-white font-semibold py-2.5 rounded-xl text-sm transition active:scale-95 border border-white/5"
+                >
                   <MessageSquare className="h-4 w-4 text-red-500" /> Message
                 </button>
               </div>
@@ -609,6 +659,62 @@ function ProducerProfilePage() {
           </div>
         </div>
       </main>
+
+      {/* Message Modal */}
+      {showMessageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl">
+            <button
+              onClick={() => setShowMessageModal(false)}
+              className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-500">
+              <MessageSquare className="h-3.5 w-3.5" /> Direct Message
+            </div>
+            
+            <h3 className="mt-3 font-display text-2xl font-bold text-white">
+              Message {profile?.producerName}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Send a direct message to this producer
+            </p>
+            
+            <div className="mt-5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                Your Message
+              </label>
+              <textarea
+                rows={5}
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                placeholder="Hi! I'm interested in working with you..."
+                className="w-full rounded-xl border border-white/10 bg-white/5 py-3 px-4 text-sm text-white placeholder-muted-foreground focus:border-blue-500 focus:outline-none resize-none"
+              />
+            </div>
+            
+            <button
+              onClick={sendMessage}
+              disabled={sendingMessage || !messageText.trim()}
+              className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-blue-600 to-blue-700 py-3.5 text-base font-bold text-white shadow-xl transition hover:brightness-110 disabled:opacity-50"
+            >
+              {sendingMessage ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Send Message
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       <Player />
     </div>
