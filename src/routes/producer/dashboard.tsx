@@ -119,14 +119,40 @@ function Dashboard() {
     
     // Load direct messages
     try {
-      const { data: messages } = await (supabase as any)
+      const { data: messages, error: msgError } = await (supabase as any)
         .from("direct_messages")
-        .select("*, sender:profiles!sender_id(name), receiver:profiles!receiver_id(name)")
+        .select("*")
         .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
         .order("created_at", { ascending: false });
       
-      if (messages) {
-        setDirectMessages(messages);
+      console.log("📧 Producer messages query result:", messages, "Error:", msgError);
+      
+      if (messages && messages.length > 0) {
+        // Fetch sender and receiver names separately
+        const allUserIds = new Set<string>();
+        messages.forEach((msg: any) => {
+          allUserIds.add(msg.sender_id);
+          allUserIds.add(msg.receiver_id);
+        });
+
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, name, email")
+          .in("id", Array.from(allUserIds));
+
+        const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+        const enrichedMessages = messages.map((msg: any) => ({
+          ...msg,
+          sender: profileMap.get(msg.sender_id) || { name: "Unknown" },
+          receiver: profileMap.get(msg.receiver_id) || { name: "Unknown" },
+        }));
+
+        setDirectMessages(enrichedMessages);
+        console.log("📧 Producer loaded", enrichedMessages.length, "direct messages");
+      } else {
+        setDirectMessages([]);
+        console.log("📧 Producer: No direct messages found");
       }
     } catch (e) {
       console.error("Error loading messages:", e);
