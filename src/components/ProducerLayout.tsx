@@ -63,7 +63,13 @@ const NAV = [
   },
   {
     to: "/producer/dashboard",
-    label: "Messages",
+    label: "Direct Messages",
+    icon: MessageSquare,
+    search: { tab: "direct-messages" as const },
+  },
+  {
+    to: "/producer/dashboard",
+    label: "Negotiations",
     icon: MessageSquare,
     search: { tab: "messages" as const },
   },
