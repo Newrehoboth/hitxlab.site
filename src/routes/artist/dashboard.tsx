@@ -30,7 +30,7 @@ import { sendPurchaseEmailsFn } from "@/lib/email.functions";
 
 const searchSchema = z.object({
   tab: z
-    .enum(["overview", "purchases", "messages", "settings"])
+    .enum(["overview", "purchases", "messages", "direct-messages", "settings"])
     .optional()
     .default("overview"),
 });
@@ -89,6 +89,7 @@ function ArtistDashboard() {
 
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [offers, setOffers] = useState<OfferItem[]>([]);
+  const [directMessages, setDirectMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeOfferId, setActiveOfferId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -278,6 +279,17 @@ function ArtistDashboard() {
       if (formattedOffers.length > 0 && !activeOfferId) {
         setActiveOfferId(formattedOffers[0].id);
       }
+
+      // 3. Fetch direct messages (sent and received)
+      const { data: messages } = await (supabase as any)
+        .from("direct_messages")
+        .select("*, sender:profiles!sender_id(name), receiver:profiles!receiver_id(name)")
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order("created_at", { ascending: false });
+
+      if (messages) {
+        setDirectMessages(messages);
+      }
     } catch (e) {
       console.error("Error loading artist dashboard:", e);
     } finally {
@@ -436,6 +448,7 @@ function ArtistDashboard() {
           {[
             { id: "overview", label: "Overview", icon: Headphones },
             { id: "purchases", label: `My Purchases (${orders.length})`, icon: ShoppingBag },
+            { id: "direct-messages", label: `Messages (${directMessages.length})`, icon: MessageSquare },
             { id: "messages", label: `Negotiations (${offers.length})`, icon: MessageSquare },
             { id: "settings", label: "Account Settings", icon: Settings },
           ].map((t) => {
@@ -636,6 +649,61 @@ function ArtistDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---------------- TAB: DIRECT MESSAGES ---------------- */}
+        {tab === "direct-messages" && (
+          <div className="rounded-2xl border border-white/10 bg-surface/40 p-6">
+            <h2 className="mb-6 font-display text-2xl font-bold">Direct Messages</h2>
+            
+            {directMessages.length === 0 ? (
+              <div className="py-12 text-center">
+                <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground/40" />
+                <p className="mt-4 text-sm text-muted-foreground">No messages yet</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Visit a producer's profile and click "Message" to start a conversation
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {directMessages.map((msg) => {
+                  const isSent = msg.sender_id === user?.id;
+                  const otherPerson = isSent ? msg.receiver : msg.sender;
+                  
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`rounded-xl border p-4 ${
+                        isSent
+                          ? "border-blue-500/20 bg-blue-500/5"
+                          : msg.read
+                          ? "border-white/10 bg-surface/60"
+                          : "border-red-500/20 bg-red-500/5"
+                      }`}
+                    >
+                      <div className="mb-2 flex items-start justify-between">
+                        <div>
+                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            {isSent ? "To" : "From"}:
+                          </span>
+                          <p className="text-sm font-semibold">{otherPerson?.name || "Unknown User"}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(msg.created_at).toLocaleDateString()} {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <p className="text-sm leading-relaxed text-foreground/90">{msg.message}</p>
+                      {!isSent && !msg.read && (
+                        <span className="mt-2 inline-block rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                          New
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

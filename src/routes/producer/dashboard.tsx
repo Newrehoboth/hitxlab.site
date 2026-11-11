@@ -77,6 +77,7 @@ const searchSchema = z.object({
       "followers",
       "notifications",
       "analytics",
+      "direct-messages",
       "messages",
       "contracts",
       "settings",
@@ -102,6 +103,7 @@ function Dashboard() {
   const { profile } = useProducerProfile();
   const [beats, setBeats] = useState<Beat[]>([]);
   const [orders, setOrders] = useState<ProducerOrderRecord[]>([]);
+  const [directMessages, setDirectMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [followerCount, setFollowerCount] = useState<number>(0);
 
@@ -114,6 +116,22 @@ function Dashboard() {
     ]);
     setBeats(b);
     setOrders(o);
+    
+    // Load direct messages
+    try {
+      const { data: messages } = await (supabase as any)
+        .from("direct_messages")
+        .select("*, sender:profiles!sender_id(name), receiver:profiles!receiver_id(name)")
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order("created_at", { ascending: false });
+      
+      if (messages) {
+        setDirectMessages(messages);
+      }
+    } catch (e) {
+      console.error("Error loading messages:", e);
+    }
+    
     setLoading(false);
   };
 
@@ -182,6 +200,7 @@ function Dashboard() {
         {tab === "followers" && <Followers profile={profile} orders={orders} />}
         {tab === "notifications" && <NotificationsPanel />}
         {tab === "analytics" && <ProducerAnalytics beats={beats} orders={orders} revenue={revenue} />}
+        {tab === "direct-messages" && <DirectMessagesTab messages={directMessages} userId={user?.id} />}
         {tab === "messages" && <ProducerMessages userId={user?.id} />}
         {tab === "contracts" && <Contracts orders={orders} profile={profile} />}
         {tab === "settings" && <SettingsView />}
@@ -1850,5 +1869,169 @@ function DeleteConfirmModal({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DIRECT MESSAGES TAB
+   ───────────────────────────────────────────────────────────────────────────── */
+function DirectMessagesTab({ messages, userId }: { messages: any[]; userId?: string }) {
+  const [replyTo, setReplyTo] = useState<any | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const handleReply = async () => {
+    if (!replyTo || !replyText.trim() || !userId) return;
+    
+    setSending(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("direct_messages")
+        .insert({
+          sender_id: userId,
+          receiver_id: replyTo.sender_id,
+          message: replyText.trim(),
+        });
+
+      if (error) throw error;
+
+      alert("Reply sent successfully!");
+      setReplyTo(null);
+      setReplyText("");
+      // Refresh would happen automatically
+    } catch (error: any) {
+      console.error("Reply error:", error);
+      alert("Could not send reply. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="font-display text-3xl font-bold">Direct Messages</h1>
+        <p className="text-sm text-muted-foreground">Messages from artists who want to work with you</p>
+      </div>
+
+      {messages.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-surface/40 p-12 text-center">
+          <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground/40" />
+          <p className="mt-4 text-sm text-muted-foreground">No messages yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Artists can message you from your producer profile
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {messages.map((msg) => {
+            const isReceived = msg.receiver_id === userId;
+            const otherPerson = isReceived ? msg.sender : msg.receiver;
+            
+            return (
+              <div
+                key={msg.id}
+                className={`rounded-xl border p-4 ${
+                  !isReceived
+                    ? "border-blue-500/20 bg-blue-500/5"
+                    : msg.read
+                    ? "border-white/10 bg-surface/60"
+                    : "border-red-500/20 bg-red-500/5"
+                }`}
+              >
+                <div className="mb-2 flex items-start justify-between">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      {isReceived ? "From" : "To"}:
+                    </span>
+                    <p className="text-sm font-semibold">{otherPerson?.name || "Unknown User"}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(msg.created_at).toLocaleDateString()} {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    {isReceived && !msg.read && (
+                      <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                        New
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed text-foreground/90">{msg.message}</p>
+                
+                {isReceived && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => setReplyTo(msg)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold hover:bg-white/10"
+                    >
+                      <Send className="h-3 w-3" /> Reply
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Reply Modal */}
+      {replyTo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl">
+            <button
+              onClick={() => setReplyTo(null)}
+              className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-500">
+              <Send className="h-3.5 w-3.5" /> Reply to Message
+            </div>
+            
+            <h3 className="mt-3 font-display text-2xl font-bold text-white">
+              Reply to {replyTo.sender?.name || "Artist"}
+            </h3>
+            
+            <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
+              <p className="text-xs text-muted-foreground mb-1">Original message:</p>
+              <p className="text-sm text-foreground/80">{replyTo.message}</p>
+            </div>
+            
+            <div className="mt-4">
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                Your Reply
+              </label>
+              <textarea
+                rows={5}
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="Type your reply..."
+                className="w-full rounded-xl border border-white/10 bg-white/5 py-3 px-4 text-sm text-white placeholder-muted-foreground focus:border-blue-500 focus:outline-none resize-none"
+              />
+            </div>
+            
+            <button
+              onClick={handleReply}
+              disabled={sending || !replyText.trim()}
+              className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-blue-600 to-blue-700 py-3.5 text-base font-bold text-white shadow-xl transition hover:brightness-110 disabled:opacity-50"
+            >
+              {sending ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Send Reply
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
