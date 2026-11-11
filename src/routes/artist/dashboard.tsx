@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { z } from "zod";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   ShoppingBag,
   MessageSquare,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   XCircle,
   Send,
+  Loader2,
   User as UserIcon,
   ChevronRight,
   ShieldCheck,
@@ -683,54 +684,22 @@ function ArtistDashboard() {
         {/* ---------------- TAB: DIRECT MESSAGES ---------------- */}
         {tab === "direct-messages" && (
           <div className="rounded-2xl border border-white/10 bg-surface/40 p-6">
-            <h2 className="mb-6 font-display text-2xl font-bold">Direct Messages</h2>
+            <h2 className="mb-6 font-display text-2xl font-bold">Messages</h2>
             
             {directMessages.length === 0 ? (
               <div className="py-12 text-center">
                 <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground/40" />
-                <p className="mt-4 text-sm text-muted-foreground">No messages yet</p>
+                <p className="mt-4 text-sm text-muted-foreground">No conversations yet</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Visit a producer's profile and click "Message" to start a conversation
+                  Visit a producer's profile and click "Message" to start chatting
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {directMessages.map((msg) => {
-                  const isSent = msg.sender_id === user?.id;
-                  const otherPerson = isSent ? msg.receiver : msg.sender;
-                  
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`rounded-xl border p-4 ${
-                        isSent
-                          ? "border-blue-500/20 bg-blue-500/5"
-                          : msg.read
-                          ? "border-white/10 bg-surface/60"
-                          : "border-red-500/20 bg-red-500/5"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-start justify-between">
-                        <div>
-                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                            {isSent ? "To" : "From"}:
-                          </span>
-                          <p className="text-sm font-semibold">{otherPerson?.name || "Unknown User"}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(msg.created_at).toLocaleDateString()} {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </div>
-                      <p className="text-sm leading-relaxed text-foreground/90">{msg.message}</p>
-                      {!isSent && !msg.read && (
-                        <span className="mt-2 inline-block rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                          New
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <ChatInterface 
+                messages={directMessages} 
+                currentUserId={user?.id} 
+                userRole="artist"
+              />
             )}
           </div>
         )}
@@ -1064,4 +1033,223 @@ function defaultMockOffers(): OfferItem[] {
       ],
     },
   ];
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   WHATSAPP-STYLE CHAT INTERFACE
+   ───────────────────────────────────────────────────────────────────────────── */
+function ChatInterface({ 
+  messages, 
+  currentUserId, 
+  userRole 
+}: { 
+  messages: any[]; 
+  currentUserId?: string;
+  userRole: "artist" | "producer";
+}) {
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+  const chatBoxRef = useRef<HTMLDivElement>(null);
+
+  // Group messages by conversation (other person)
+  const conversations = useMemo(() => {
+    const convMap = new Map<string, any[]>();
+    
+    messages.forEach((msg) => {
+      const otherPersonId = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
+      if (!convMap.has(otherPersonId)) {
+        convMap.set(otherPersonId, []);
+      }
+      convMap.get(otherPersonId)!.push(msg);
+    });
+
+    // Sort messages within each conversation
+    convMap.forEach((msgs) => {
+      msgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    });
+
+    return Array.from(convMap.entries()).map(([otherPersonId, msgs]) => {
+      const lastMsg = msgs[msgs.length - 1];
+      const otherPerson = lastMsg.sender_id === currentUserId ? lastMsg.receiver : lastMsg.sender;
+      const unreadCount = msgs.filter(m => m.receiver_id === currentUserId && !m.read).length;
+      
+      return {
+        otherPersonId,
+        otherPerson,
+        messages: msgs,
+        lastMessage: lastMsg,
+        unreadCount,
+      };
+    }).sort((a, b) => 
+      new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
+    );
+  }, [messages, currentUserId]);
+
+  // Auto-scroll to bottom when conversation changes or new message
+  useEffect(() => {
+    if (chatBoxRef.current) {
+      chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+    }
+  }, [activeConversation, conversations]);
+
+  // Auto-select first conversation
+  useEffect(() => {
+    if (!activeConversation && conversations.length > 0) {
+      setActiveConversation(conversations[0].otherPersonId);
+    }
+  }, [conversations, activeConversation]);
+
+  const activeConv = conversations.find(c => c.otherPersonId === activeConversation);
+
+  const handleSendMessage = async () => {
+    if (!replyText.trim() || !activeConversation || !currentUserId) return;
+
+    setSending(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("direct_messages")
+        .insert({
+          sender_id: currentUserId,
+          receiver_id: activeConversation,
+          message: replyText.trim(),
+        });
+
+      if (error) throw error;
+
+      setReplyText("");
+      // Messages will refresh automatically
+    } catch (error: any) {
+      console.error("Send message error:", error);
+      alert("Could not send message. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (conversations.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground/40" />
+        <p className="mt-4 text-sm text-muted-foreground">No conversations yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 h-[600px]">
+      {/* Conversations List */}
+      <div className="rounded-xl border border-white/10 bg-surface/60 overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-white/10">
+          <h3 className="font-semibold">Conversations</h3>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {conversations.map((conv) => (
+            <button
+              key={conv.otherPersonId}
+              onClick={() => setActiveConversation(conv.otherPersonId)}
+              className={`w-full p-4 text-left border-b border-white/5 hover:bg-white/5 transition ${
+                activeConversation === conv.otherPersonId ? "bg-white/10" : ""
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm truncate">
+                    {conv.otherPerson?.name || "Unknown User"}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate mt-1">
+                    {conv.lastMessage.message}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    {new Date(conv.lastMessage.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                  </span>
+                  {conv.unreadCount > 0 && (
+                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {conv.unreadCount}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chat Box */}
+      {activeConv && (
+        <div className="rounded-xl border border-white/10 bg-surface/60 overflow-hidden flex flex-col">
+          {/* Chat Header */}
+          <div className="p-4 border-b border-white/10 bg-surface/80">
+            <div className="font-semibold">{activeConv.otherPerson?.name || "Unknown User"}</div>
+            <div className="text-xs text-muted-foreground">
+              {userRole === "artist" ? "Producer" : "Artist"}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div 
+            ref={chatBoxRef}
+            className="flex-1 overflow-y-auto p-4 space-y-3"
+            style={{ maxHeight: "400px" }}
+          >
+            {activeConv.messages.map((msg) => {
+              const isMine = msg.sender_id === currentUserId;
+              
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[70%] rounded-2xl px-4 py-2 ${
+                      isMine
+                        ? "bg-blue-600 text-white rounded-br-sm"
+                        : "bg-white/10 text-foreground rounded-bl-sm"
+                    }`}
+                  >
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {msg.message}
+                    </p>
+                    <span className={`text-[10px] mt-1 block ${isMine ? "text-blue-100" : "text-muted-foreground"}`}>
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Message Input */}
+          <div className="p-4 border-t border-white/10">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Type a message..."
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
+                disabled={sending}
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={sending || !replyText.trim()}
+                className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50 transition"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

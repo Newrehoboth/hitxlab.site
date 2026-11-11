@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import {
   Music4,
   Users,
@@ -226,7 +226,25 @@ function Dashboard() {
         {tab === "followers" && <Followers profile={profile} orders={orders} />}
         {tab === "notifications" && <NotificationsPanel />}
         {tab === "analytics" && <ProducerAnalytics beats={beats} orders={orders} revenue={revenue} />}
-        {tab === "direct-messages" && <DirectMessagesTab messages={directMessages} userId={user?.id} />}
+        {tab === "direct-messages" && (
+          <div>
+            <div className="mb-6">
+              <h1 className="font-display text-3xl font-bold">Messages</h1>
+              <p className="text-sm text-muted-foreground">Chat with artists</p>
+            </div>
+            {directMessages.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-surface/40 p-12 text-center">
+                <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground/40" />
+                <p className="mt-4 text-sm text-muted-foreground">No conversations yet</p>
+              </div>
+            ) : (
+              <ChatInterfaceProducer 
+                messages={directMessages} 
+                currentUserId={user?.id}
+              />
+            )}
+          </div>
+        )}
         {tab === "messages" && <ProducerMessages userId={user?.id} />}
         {tab === "contracts" && <Contracts orders={orders} profile={profile} />}
         {tab === "settings" && <SettingsView />}
@@ -1899,162 +1917,212 @@ function DeleteConfirmModal({
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   DIRECT MESSAGES TAB
+   WHATSAPP-STYLE CHAT INTERFACE FOR PRODUCERS
    ───────────────────────────────────────────────────────────────────────────── */
-function DirectMessagesTab({ messages, userId }: { messages: any[]; userId?: string }) {
-  const [replyTo, setReplyTo] = useState<any | null>(null);
+function ChatInterfaceProducer({ 
+  messages, 
+  currentUserId
+}: { 
+  messages: any[]; 
+  currentUserId?: string;
+}) {
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const chatBoxRef = useRef<HTMLDivElement>(null);
 
-  const handleReply = async () => {
-    if (!replyTo || !replyText.trim() || !userId) return;
+  // Group messages by conversation (other person)
+  const conversations = useMemo(() => {
+    const convMap = new Map<string, any[]>();
     
+    messages.forEach((msg) => {
+      const otherPersonId = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
+      if (!convMap.has(otherPersonId)) {
+        convMap.set(otherPersonId, []);
+      }
+      convMap.get(otherPersonId)!.push(msg);
+    });
+
+    // Sort messages within each conversation
+    convMap.forEach((msgs) => {
+      msgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    });
+
+    return Array.from(convMap.entries()).map(([otherPersonId, msgs]) => {
+      const lastMsg = msgs[msgs.length - 1];
+      const otherPerson = lastMsg.sender_id === currentUserId ? lastMsg.receiver : lastMsg.sender;
+      const unreadCount = msgs.filter(m => m.receiver_id === currentUserId && !m.read).length;
+      
+      return {
+        otherPersonId,
+        otherPerson,
+        messages: msgs,
+        lastMessage: lastMsg,
+        unreadCount,
+      };
+    }).sort((a, b) => 
+      new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
+    );
+  }, [messages, currentUserId]);
+
+  // Auto-scroll to bottom when conversation changes or new message
+  useEffect(() => {
+    if (chatBoxRef.current) {
+      chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+    }
+  }, [activeConversation, conversations]);
+
+  // Auto-select first conversation
+  useEffect(() => {
+    if (!activeConversation && conversations.length > 0) {
+      setActiveConversation(conversations[0].otherPersonId);
+    }
+  }, [conversations, activeConversation]);
+
+  const activeConv = conversations.find(c => c.otherPersonId === activeConversation);
+
+  const handleSendMessage = async () => {
+    if (!replyText.trim() || !activeConversation || !currentUserId) return;
+
     setSending(true);
     try {
       const { error } = await (supabase as any)
         .from("direct_messages")
         .insert({
-          sender_id: userId,
-          receiver_id: replyTo.sender_id,
+          sender_id: currentUserId,
+          receiver_id: activeConversation,
           message: replyText.trim(),
         });
 
       if (error) throw error;
 
-      alert("Reply sent successfully!");
-      setReplyTo(null);
       setReplyText("");
-      // Refresh would happen automatically
+      // Messages will refresh automatically
     } catch (error: any) {
-      console.error("Reply error:", error);
-      alert("Could not send reply. Please try again.");
+      console.error("Send message error:", error);
+      alert("Could not send message. Please try again.");
     } finally {
       setSending(false);
     }
   };
 
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl font-bold">Direct Messages</h1>
-        <p className="text-sm text-muted-foreground">Messages from artists who want to work with you</p>
+  if (conversations.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground/40" />
+        <p className="mt-4 text-sm text-muted-foreground">No conversations yet</p>
       </div>
+    );
+  }
 
-      {messages.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-surface/40 p-12 text-center">
-          <MessageSquare className="mx-auto h-12 w-12 text-muted-foreground/40" />
-          <p className="mt-4 text-sm text-muted-foreground">No messages yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Artists can message you from your producer profile
-          </p>
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 h-[600px]">
+      {/* Conversations List */}
+      <div className="rounded-xl border border-white/10 bg-surface/60 overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-white/10">
+          <h3 className="font-semibold">Conversations</h3>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {messages.map((msg) => {
-            const isReceived = msg.receiver_id === userId;
-            const otherPerson = isReceived ? msg.sender : msg.receiver;
-            
-            return (
-              <div
-                key={msg.id}
-                className={`rounded-xl border p-4 ${
-                  !isReceived
-                    ? "border-blue-500/20 bg-blue-500/5"
-                    : msg.read
-                    ? "border-white/10 bg-surface/60"
-                    : "border-red-500/20 bg-red-500/5"
-                }`}
-              >
-                <div className="mb-2 flex items-start justify-between">
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {isReceived ? "From" : "To"}:
-                    </span>
-                    <p className="text-sm font-semibold">{otherPerson?.name || "Unknown User"}</p>
+        <div className="flex-1 overflow-y-auto">
+          {conversations.map((conv) => (
+            <button
+              key={conv.otherPersonId}
+              onClick={() => setActiveConversation(conv.otherPersonId)}
+              className={`w-full p-4 text-left border-b border-white/5 hover:bg-white/5 transition ${
+                activeConversation === conv.otherPersonId ? "bg-white/10" : ""
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm truncate">
+                    {conv.otherPerson?.name || "Unknown User"}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(msg.created_at).toLocaleDateString()} {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    {isReceived && !msg.read && (
-                      <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                        New
-                      </span>
-                    )}
+                  <div className="text-xs text-muted-foreground truncate mt-1">
+                    {conv.lastMessage.message}
                   </div>
                 </div>
-                <p className="text-sm leading-relaxed text-foreground/90">{msg.message}</p>
-                
-                {isReceived && (
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => setReplyTo(msg)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold hover:bg-white/10"
-                    >
-                      <Send className="h-3 w-3" /> Reply
-                    </button>
-                  </div>
-                )}
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    {new Date(conv.lastMessage.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                  </span>
+                  {conv.unreadCount > 0 && (
+                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {conv.unreadCount}
+                    </span>
+                  )}
+                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Reply Modal */}
-      {replyTo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl">
-            <button
-              onClick={() => setReplyTo(null)}
-              className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
-            >
-              <X className="h-5 w-5" />
             </button>
-            
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-blue-500">
-              <Send className="h-3.5 w-3.5" /> Reply to Message
-            </div>
-            
-            <h3 className="mt-3 font-display text-2xl font-bold text-white">
-              Reply to {replyTo.sender?.name || "Artist"}
-            </h3>
-            
-            <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3">
-              <p className="text-xs text-muted-foreground mb-1">Original message:</p>
-              <p className="text-sm text-foreground/80">{replyTo.message}</p>
-            </div>
-            
-            <div className="mt-4">
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Your Reply
-              </label>
-              <textarea
-                rows={5}
+          ))}
+        </div>
+      </div>
+
+      {/* Chat Box */}
+      {activeConv && (
+        <div className="rounded-xl border border-white/10 bg-surface/60 overflow-hidden flex flex-col">
+          {/* Chat Header */}
+          <div className="p-4 border-b border-white/10 bg-surface/80">
+            <div className="font-semibold">{activeConv.otherPerson?.name || "Unknown User"}</div>
+            <div className="text-xs text-muted-foreground">Artist</div>
+          </div>
+
+          {/* Messages */}
+          <div 
+            ref={chatBoxRef}
+            className="flex-1 overflow-y-auto p-4 space-y-3"
+            style={{ maxHeight: "400px" }}
+          >
+            {activeConv.messages.map((msg) => {
+              const isMine = msg.sender_id === currentUserId;
+              
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[70%] rounded-2xl px-4 py-2 ${
+                      isMine
+                        ? "bg-blue-600 text-white rounded-br-sm"
+                        : "bg-white/10 text-foreground rounded-bl-sm"
+                    }`}
+                  >
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {msg.message}
+                    </p>
+                    <span className={`text-[10px] mt-1 block ${isMine ? "text-blue-100" : "text-muted-foreground"}`}>
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Message Input */}
+          <div className="p-4 border-t border-white/10">
+            <div className="flex gap-2">
+              <input
+                type="text"
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Type your reply..."
-                className="w-full rounded-xl border border-white/10 bg-white/5 py-3 px-4 text-sm text-white placeholder-muted-foreground focus:border-blue-500 focus:outline-none resize-none"
+                onKeyPress={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Type a message..."
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
+                disabled={sending}
               />
+              <button
+                onClick={handleSendMessage}
+                disabled={sending || !replyText.trim()}
+                className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50 transition"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
             </div>
-            
-            <button
-              onClick={handleReply}
-              disabled={sending || !replyText.trim()}
-              className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-blue-600 to-blue-700 py-3.5 text-base font-bold text-white shadow-xl transition hover:brightness-110 disabled:opacity-50"
-            >
-              {sending ? (
-                <>
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Send Reply
-                </>
-              )}
-            </button>
           </div>
         </div>
       )}
