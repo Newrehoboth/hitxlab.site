@@ -550,18 +550,41 @@ function CommentsSection({ beatId }: { beatId: string }) {
   // Load comments
   const loadComments = async () => {
     try {
-      const { data, error } = await (supabase as any)
+      // Step 1: fetch comments only (no join)
+      const { data: rawComments, error } = await (supabase as any)
         .from("beat_comments")
-        .select("id, beat_id, user_id, body, created_at, profiles(id, name)")
+        .select("id, beat_id, user_id, body, created_at")
         .eq("beat_id", beatId)
         .order("created_at", { ascending: false });
 
       if (error) {
         console.error("❌ Comments load error:", error);
-      } else {
-        console.log("✅ Comments loaded:", data?.length ?? 0);
-        setComments(data ?? []);
+        setLoading(false);
+        return;
       }
+
+      if (!rawComments || rawComments.length === 0) {
+        setComments([]);
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: fetch profile names separately
+      const userIds = [...new Set(rawComments.map((c: any) => c.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("id", userIds);
+
+      const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+
+      const enriched = rawComments.map((c: any) => ({
+        ...c,
+        profiles: profileMap.get(c.user_id) ?? { name: "User" },
+      }));
+
+      console.log("✅ Comments loaded:", enriched.length);
+      setComments(enriched);
     } catch (e) {
       console.error("❌ Comments exception:", e);
     } finally {
