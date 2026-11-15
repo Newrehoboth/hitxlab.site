@@ -596,7 +596,25 @@ function CommentsSection({ beatId }: { beatId: string }) {
     if (beatId) loadComments();
   }, [beatId]);
 
-  // REMOVED - No global click handler, we'll handle it manually
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!openMenuId) return;
+    
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Check if clicked outside the menu
+      if (!target.closest('[data-menu-container]')) {
+        setOpenMenuId(null);
+      }
+    };
+    
+    // Add listener on next tick to avoid immediate closure
+    setTimeout(() => {
+      document.addEventListener("click", handler);
+    }, 0);
+    
+    return () => document.removeEventListener("click", handler);
+  }, [openMenuId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -789,48 +807,42 @@ function CommentsSection({ beatId }: { beatId: string }) {
 
                     {/* 3-dot menu — only for own comments */}
                     {isOwn && (
-                      <div className="relative">
+                      <div className="relative" data-menu-container>
                         <button
                           type="button"
                           onClick={() => {
                             console.log("🔘 BUTTON CLICKED - Current:", openMenuId, "Setting to:", openMenuId === c.id ? "null" : c.id);
                             setOpenMenuId(openMenuId === c.id ? null : c.id);
                           }}
-                          className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-white hover:bg-white/20"
+                          className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-white/10 hover:text-white transition"
                         >
-                          <MoreHorizontal className="h-5 w-5" />
+                          <MoreHorizontal className="h-4 w-4" />
                         </button>
 
                         {openMenuId === c.id && (
-                          <div className="absolute right-0 top-10 w-48 rounded-xl border-2 border-red-500 bg-black shadow-2xl">
+                          <div className="absolute right-0 top-9 w-36 rounded-lg border border-white/10 bg-[#1c1c1c] shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden z-50">
                             <button
                               type="button"
                               onClick={() => {
                                 console.log("✏️ EDIT CLICKED");
                                 startEdit(c);
                               }}
-                              className="flex w-full items-center gap-3 px-5 py-4 text-base font-bold text-white hover:bg-blue-600"
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-medium text-white hover:bg-white/10 transition"
                             >
-                              <Pencil className="h-5 w-5 text-blue-400" />
-                              <span>EDIT</span>
+                              <Pencil className="h-3.5 w-3.5 text-blue-400" />
+                              <span>Edit</span>
                             </button>
+                            <div className="h-px bg-white/10" />
                             <button
                               type="button"
                               onClick={() => {
                                 console.log("🗑️ DELETE CLICKED");
                                 handleDelete(c.id);
                               }}
-                              className="flex w-full items-center gap-3 px-5 py-4 text-base font-bold text-red-400 hover:bg-red-600"
+                              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/15 transition"
                             >
-                              <Trash2 className="h-5 w-5" />
-                              <span>DELETE</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setOpenMenuId(null)}
-                              className="flex w-full items-center justify-center px-5 py-3 text-sm text-gray-400 hover:bg-white/10"
-                            >
-                              Close
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Delete</span>
                             </button>
                           </div>
                         )}
