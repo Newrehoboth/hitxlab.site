@@ -23,7 +23,7 @@ export const Route = createFileRoute("/producer/upload")({
 import { uploadWithProgress } from "@/lib/storage-upload";
 
 const steps = ["Beat information", "Upload files", "Licensing"];
-const GENRES = ["Afrobeats", "Trap", "Drill", "R&B", "Boom Bap", "Phonk", "Latin Trap", "House"];
+const GENRES = ["Afrobeats", "Amapiano", "Trap", "Drill", "R&B", "Boom Bap", "Phonk", "Latin Trap", "House"];
 const MOODS = ["Dark", "Sad", "Aggressive", "Chill", "Ethereal", "Uplifting", "Romantic", "Cinematic"];
 const KEYS = ["C maj", "C min", "D maj", "D min", "E maj", "E min", "F maj", "F min", "F# min", "G maj", "G min", "A maj", "A min", "B maj", "B min"];
 

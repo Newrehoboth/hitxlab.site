@@ -38,6 +38,7 @@ export type Beat = {
 
 export const GENRES = [
   "Afrobeats",
+  "Amapiano",
   "Trap",
   "Drill",
   "R&B",
