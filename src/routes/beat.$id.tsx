@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ArrowLeft, BadgeCheck, Check, FileText, Music4, Play, Pause, ShoppingBag, Star, X, Sparkles, ShieldCheck, Loader2, MessageSquare } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { ArrowLeft, BadgeCheck, Check, FileText, Music4, Play, Pause, ShoppingBag, Star, X, Sparkles, ShieldCheck, Loader2, MessageSquare, Send, Trash2 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Player } from "@/components/Player";
 import { CartDrawer } from "@/components/CartDrawer";
@@ -296,6 +296,9 @@ function BeatDetails() {
         </section>
       )}
 
+      {/* Comments Section */}
+      <CommentsSection beatId={beat.id} />
+
       {viewing && <ContractModal license={viewing} beat={beat.title} producer={beat.producer} onClose={() => setViewing(null)} />}
       {negotiateOpen && selected && (
         <NegotiateModal
@@ -524,5 +527,219 @@ function NegotiateModal({
         )}
       </div>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   COMMENTS SECTION
+   ───────────────────────────────────────────────────────────────────────────── */
+function CommentsSection({ beatId }: { beatId: string }) {
+  const { user } = useAuth();
+  const nav = useNavigate();
+  const [comments, setComments] = useState<any[]>([]);
+  const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load comments
+  const loadComments = async () => {
+    const { data } = await (supabase as any)
+      .from("beat_comments")
+      .select("*, profiles(name, id)")
+      .eq("beat_id", beatId)
+      .order("created_at", { ascending: false });
+    setComments(data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadComments();
+  }, [beatId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Not signed in → show auth prompt
+    if (!user) {
+      setShowAuthPrompt(true);
+      return;
+    }
+
+    if (!text.trim()) return;
+    setSubmitting(true);
+
+    try {
+      const { error } = await (supabase as any)
+        .from("beat_comments")
+        .insert({
+          beat_id: beatId,
+          user_id: user.id,
+          body: text.trim(),
+        });
+
+      if (error) throw error;
+
+      setText("");
+      await loadComments();
+    } catch (err: any) {
+      console.error("Comment error:", err);
+      alert("Could not post comment. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (commentId: string) => {
+    if (!user) return;
+    await (supabase as any)
+      .from("beat_comments")
+      .delete()
+      .eq("id", commentId)
+      .eq("user_id", user.id);
+    await loadComments();
+  };
+
+  return (
+    <section className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
+      <h2 className="mb-6 font-display text-2xl font-bold">
+        Comments <span className="text-muted-foreground text-lg font-normal">({comments.length})</span>
+      </h2>
+
+      {/* Comment Input */}
+      <form onSubmit={handleSubmit} className="mb-8">
+        <div className="flex gap-3 items-start">
+          {/* Avatar */}
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-red-500 to-red-700 text-xs font-bold text-white mt-1">
+            {user ? user.name?.slice(0, 1).toUpperCase() : "?"}
+          </div>
+          <div className="flex-1">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={3}
+              placeholder={user ? "Leave a comment..." : "Sign in to leave a comment..."}
+              className="w-full rounded-xl border border-white/10 bg-surface/60 px-4 py-3 text-sm text-white placeholder-muted-foreground outline-none focus:border-red-500/40 focus:ring-2 focus:ring-red-500/10 resize-none transition"
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={submitting || (!user && false)}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] px-5 py-2.5 text-sm font-bold text-black transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+              >
+                {submitting
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Send className="h-4 w-4" />}
+                {submitting ? "Posting..." : "Post Comment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      {/* Comments List */}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : comments.length === 0 ? (
+        <div className="rounded-2xl border border-white/8 bg-surface/30 py-12 text-center">
+          <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/30" />
+          <p className="mt-3 text-sm text-muted-foreground">No comments yet. Be the first!</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {comments.map((c) => {
+            const isOwn = user?.id === c.user_id;
+            const initials = c.profiles?.name?.slice(0, 1).toUpperCase() ?? "?";
+            const timeAgo = (() => {
+              const diff = Date.now() - new Date(c.created_at).getTime();
+              const mins = Math.floor(diff / 60000);
+              const hrs = Math.floor(diff / 3600000);
+              const days = Math.floor(diff / 86400000);
+              if (mins < 1) return "just now";
+              if (mins < 60) return `${mins}m ago`;
+              if (hrs < 24) return `${hrs}h ago`;
+              return `${days}d ago`;
+            })();
+
+            return (
+              <div key={c.id} className="flex gap-3">
+                {/* Avatar */}
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 text-xs font-bold text-white mt-1">
+                  {initials}
+                </div>
+                <div className="flex-1 rounded-xl border border-white/8 bg-surface/40 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{c.profiles?.name ?? "User"}</span>
+                      {isOwn && (
+                        <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-500">You</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{timeAgo}</span>
+                      {isOwn && (
+                        <button
+                          onClick={() => handleDelete(c.id)}
+                          className="text-muted-foreground hover:text-red-500 transition"
+                          title="Delete comment"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-sm leading-relaxed text-foreground/85 whitespace-pre-wrap">{c.body}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Auth Prompt Modal */}
+      {showAuthPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-sm rounded-3xl border border-white/10 bg-surface p-7 shadow-2xl text-center">
+            <button
+              onClick={() => setShowAuthPrompt(false)}
+              className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-red-500/10">
+              <MessageSquare className="h-7 w-7 text-red-500" />
+            </div>
+            <h3 className="font-display text-xl font-bold">Join the conversation</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sign in or create an account to leave a comment on this beat.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setShowAuthPrompt(false);
+                  nav({ to: "/auth", search: { mode: "signin" } });
+                }}
+                className="w-full rounded-xl bg-gradient-to-b from-[#EF4444] to-[#DC2626] py-3 text-sm font-bold text-black transition hover:brightness-110"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => {
+                  setShowAuthPrompt(false);
+                  nav({ to: "/auth", search: { mode: "signup" } });
+                }}
+                className="w-full rounded-xl border border-white/15 bg-white/5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Create Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
