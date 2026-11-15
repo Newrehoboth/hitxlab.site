@@ -598,7 +598,14 @@ function CommentsSection({ beatId }: { beatId: string }) {
 
   // Close menu when clicking outside
   useEffect(() => {
-    const handler = () => setOpenMenuId(null);
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't close if clicking inside a menu or menu button
+      if (target.closest('[data-comment-menu]')) {
+        return;
+      }
+      setOpenMenuId(null);
+    };
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
   }, []);
@@ -794,42 +801,54 @@ function CommentsSection({ beatId }: { beatId: string }) {
 
                     {/* 3-dot menu — only for own comments */}
                     {isOwn && (
-                      <div className="relative">
+                      <div className="relative" style={{ zIndex: 100 }}>
                         <button
+                          type="button"
                           onClick={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
-                            console.log("🔘 Menu button clicked:", { commentId: c.id, currentMenuOpen: menuOpen });
+                            console.log("🔘 Menu button clicked:", { commentId: c.id, currentMenuOpen: menuOpen, willSet: menuOpen ? null : c.id });
                             setOpenMenuId(menuOpen ? null : c.id);
                           }}
-                          className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-white/10 hover:text-white transition"
+                          className={`grid h-7 w-7 place-items-center rounded-lg transition ${
+                            menuOpen ? "bg-white/20 text-white" : "text-muted-foreground hover:bg-white/10 hover:text-white"
+                          }`}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
 
                         {menuOpen && (
                           <div
-                            className="absolute right-0 top-8 z-50 w-36 rounded-xl border border-white/10 bg-surface shadow-2xl overflow-hidden"
+                            className="absolute right-0 top-9 w-40 rounded-xl border border-white/20 bg-[#1a1a1a] shadow-[0_8px_30px_rgb(0,0,0,0.8)] overflow-hidden"
+                            style={{ zIndex: 9999 }}
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
-                              onClick={() => {
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 console.log("✏️ Edit button clicked:", c.id);
                                 startEdit(c);
                               }}
-                              className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium hover:bg-white/5 transition"
+                              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm font-medium text-white hover:bg-white/10 transition"
                             >
-                              <Pencil className="h-3.5 w-3.5 text-blue-400" />
-                              Edit
+                              <Pencil className="h-4 w-4 text-blue-400" />
+                              <span>Edit</span>
                             </button>
+                            <div className="h-px bg-white/10" />
                             <button
-                              onClick={() => {
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 console.log("🗑️ Delete button clicked:", c.id);
                                 handleDelete(c.id);
                               }}
-                              className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/10 transition"
+                              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/15 transition"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Delete
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete</span>
                             </button>
                           </div>
                         )}
