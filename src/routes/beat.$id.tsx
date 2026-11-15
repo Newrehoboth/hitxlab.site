@@ -637,8 +637,14 @@ function CommentsSection({ beatId }: { beatId: string }) {
   };
 
   const handleDelete = async (commentId: string) => {
-    if (!user) return;
+    console.log("🗑️ handleDelete called:", { commentId, userId: user?.id });
+    if (!user) {
+      console.log("❌ No user, cannot delete");
+      return;
+    }
     setOpenMenuId(null);
+    
+    console.log("🗑️ Attempting delete:", { commentId, userId: user.id });
     const { error } = await (supabase as any)
       .from("beat_comments")
       .delete()
@@ -649,20 +655,27 @@ function CommentsSection({ beatId }: { beatId: string }) {
       console.error("❌ Delete error:", error);
       alert("Could not delete comment.");
     } else {
+      console.log("✅ Delete successful");
       await loadComments();
     }
   };
 
   const startEdit = (c: any) => {
+    console.log("✏️ startEdit called:", { commentId: c.id, userId: user?.id, body: c.body });
     setEditingId(c.id);
     setEditText(c.body);
     setOpenMenuId(null);
   };
 
   const handleSaveEdit = async (commentId: string) => {
-    if (!editText.trim() || !user) return;
+    console.log("💾 handleSaveEdit called:", { commentId, editText, userId: user?.id });
+    if (!editText.trim() || !user) {
+      console.log("❌ Cannot save: no text or no user");
+      return;
+    }
     setSavingEdit(true);
 
+    console.log("💾 Attempting update:", { commentId, userId: user.id, body: editText.trim() });
     const { error } = await (supabase as any)
       .from("beat_comments")
       .update({ body: editText.trim() })
@@ -673,6 +686,7 @@ function CommentsSection({ beatId }: { beatId: string }) {
       console.error("❌ Edit error:", error);
       alert("Could not edit comment.");
     } else {
+      console.log("✅ Edit successful");
       setEditingId(null);
       setEditText("");
       await loadComments();
@@ -745,6 +759,19 @@ function CommentsSection({ beatId }: { beatId: string }) {
             const isEditing = editingId === c.id;
             const menuOpen = openMenuId === c.id;
 
+            // Debug logging
+            if (user) {
+              console.log("🔍 Comment check:", {
+                commentId: c.id,
+                userId: user.id,
+                commentUserId: c.user_id,
+                isOwn,
+                match: user.id === c.user_id,
+                userIdType: typeof user.id,
+                commentUserIdType: typeof c.user_id,
+              });
+            }
+
             return (
               <div key={c.id} className="flex gap-3">
                 {/* Avatar */}
@@ -771,6 +798,7 @@ function CommentsSection({ beatId }: { beatId: string }) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            console.log("🔘 Menu button clicked:", { commentId: c.id, currentMenuOpen: menuOpen });
                             setOpenMenuId(menuOpen ? null : c.id);
                           }}
                           className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-white/10 hover:text-white transition"
@@ -784,14 +812,20 @@ function CommentsSection({ beatId }: { beatId: string }) {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
-                              onClick={() => startEdit(c)}
+                              onClick={() => {
+                                console.log("✏️ Edit button clicked:", c.id);
+                                startEdit(c);
+                              }}
                               className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium hover:bg-white/5 transition"
                             >
                               <Pencil className="h-3.5 w-3.5 text-blue-400" />
                               Edit
                             </button>
                             <button
-                              onClick={() => handleDelete(c.id)}
+                              onClick={() => {
+                                console.log("🗑️ Delete button clicked:", c.id);
+                                handleDelete(c.id);
+                              }}
                               className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/10 transition"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
