@@ -22,6 +22,7 @@ import { Route as AdminPayoutsRouteImport } from './routes/admin/payouts'
 import { Route as ArtistDashboardRouteImport } from './routes/artist/dashboard'
 import { Route as BeatIdRouteImport } from './routes/beat.$id'
 import { Route as DashboardLibraryRouteImport } from './routes/dashboard/library'
+import { Route as DebugPurchasesRouteImport } from './routes/debug/purchases'
 import { Route as ProducerUsernameRouteImport } from './routes/producer/$username'
 import { Route as ProducerDashboardRouteImport } from './routes/producer/dashboard'
 import { Route as ProducerOnboardingRouteImport } from './routes/producer/onboarding'
@@ -98,6 +99,11 @@ const DashboardLibraryRoute = DashboardLibraryRouteImport.update({
   path: '/dashboard/library',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DebugPurchasesRoute = DebugPurchasesRouteImport.update({
+  id: '/debug/purchases',
+  path: '/debug/purchases',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProducerUsernameRoute = ProducerUsernameRouteImport.update({
   id: '/producer/$username',
   path: '/producer/$username',
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/artist/dashboard': typeof ArtistDashboardRoute
   '/beat/$id': typeof BeatIdRoute
   '/dashboard/library': typeof DashboardLibraryRoute
+  '/debug/purchases': typeof DebugPurchasesRoute
   '/producer/$username': typeof ProducerUsernameRoute
   '/producer/dashboard': typeof ProducerDashboardRoute
   '/producer/onboarding': typeof ProducerOnboardingRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/artist/dashboard': typeof ArtistDashboardRoute
   '/beat/$id': typeof BeatIdRoute
   '/dashboard/library': typeof DashboardLibraryRoute
+  '/debug/purchases': typeof DebugPurchasesRoute
   '/producer/$username': typeof ProducerUsernameRoute
   '/producer/dashboard': typeof ProducerDashboardRoute
   '/producer/onboarding': typeof ProducerOnboardingRoute
@@ -215,6 +223,7 @@ export interface FileRoutesById {
   '/artist/dashboard': typeof ArtistDashboardRoute
   '/beat/$id': typeof BeatIdRoute
   '/dashboard/library': typeof DashboardLibraryRoute
+  '/debug/purchases': typeof DebugPurchasesRoute
   '/producer/$username': typeof ProducerUsernameRoute
   '/producer/dashboard': typeof ProducerDashboardRoute
   '/producer/onboarding': typeof ProducerOnboardingRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/artist/dashboard'
     | '/beat/$id'
     | '/dashboard/library'
+    | '/debug/purchases'
     | '/producer/$username'
     | '/producer/dashboard'
     | '/producer/onboarding'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/artist/dashboard'
     | '/beat/$id'
     | '/dashboard/library'
+    | '/debug/purchases'
     | '/producer/$username'
     | '/producer/dashboard'
     | '/producer/onboarding'
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | '/artist/dashboard'
     | '/beat/$id'
     | '/dashboard/library'
+    | '/debug/purchases'
     | '/producer/$username'
     | '/producer/dashboard'
     | '/producer/onboarding'
@@ -318,6 +330,7 @@ export interface RootRouteChildren {
   ArtistDashboardRoute: typeof ArtistDashboardRoute
   BeatIdRoute: typeof BeatIdRoute
   DashboardLibraryRoute: typeof DashboardLibraryRoute
+  DebugPurchasesRoute: typeof DebugPurchasesRoute
   ProducerUsernameRoute: typeof ProducerUsernameRoute
   ProducerDashboardRoute: typeof ProducerDashboardRoute
   ProducerOnboardingRoute: typeof ProducerOnboardingRoute
@@ -424,6 +437,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardLibraryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/debug/purchases': {
+      id: '/debug/purchases'
+      path: '/debug/purchases'
+      fullPath: '/debug/purchases'
+      preLoaderRoute: typeof DebugPurchasesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/producer/$username': {
       id: '/producer/$username'
       path: '/producer/$username'
@@ -510,6 +530,7 @@ const rootRouteChildren: RootRouteChildren = {
   ArtistDashboardRoute: ArtistDashboardRoute,
   BeatIdRoute: BeatIdRoute,
   DashboardLibraryRoute: DashboardLibraryRoute,
+  DebugPurchasesRoute: DebugPurchasesRoute,
   ProducerUsernameRoute: ProducerUsernameRoute,
   ProducerDashboardRoute: ProducerDashboardRoute,
   ProducerOnboardingRoute: ProducerOnboardingRoute,

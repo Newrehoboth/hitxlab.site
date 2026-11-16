@@ -257,15 +257,66 @@ function Home() {
                 <Link to="/payouts" className="inline-flex h-12 items-center rounded-xl border border-white/15 px-6 font-medium hover:bg-white/5">How payouts work</Link>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              {beats.slice(2, 8).map((b, i) => (
-                <button key={b.id} onClick={() => play(b, beats.filter((x) => x.id !== b.id))} className={`group relative overflow-hidden rounded-xl ${i % 3 === 1 ? "row-span-2 aspect-[1/2]" : "aspect-square"}`}>
-                  <img src={b.cover} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0 opacity-0 transition group-hover:opacity-100">
-                    <div className="absolute inset-0 grid place-items-center"><Play className="h-8 w-8 fill-white text-white" /></div>
+            <div className="relative h-[600px] overflow-hidden">
+              <div className="grid grid-cols-3 gap-3 h-full">
+                {/* Column 1 - Scrolls up */}
+                <div className="flex flex-col gap-3">
+                  <div className="animate-scroll-up space-y-3">
+                    {[...beats.slice(0, 6), ...beats.slice(0, 6)].map((b, i) => (
+                      <button 
+                        key={`col1-${i}`} 
+                        onClick={() => play(b, beats.filter((x) => x.id !== b.id))} 
+                        className="group relative overflow-hidden rounded-xl aspect-square shrink-0"
+                      >
+                        <img src={b.cover} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0 opacity-0 transition group-hover:opacity-100">
+                          <div className="absolute inset-0 grid place-items-center"><Play className="h-8 w-8 fill-white text-white" /></div>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                </button>
-              ))}
+                </div>
+
+                {/* Column 2 - Scrolls down (reverse) */}
+                <div className="flex flex-col-reverse gap-3">
+                  <div className="animate-scroll-up space-y-3 flex flex-col-reverse">
+                    {[...beats.slice(6, 12), ...beats.slice(6, 12)].map((b, i) => (
+                      <button 
+                        key={`col2-${i}`} 
+                        onClick={() => play(b, beats.filter((x) => x.id !== b.id))} 
+                        className="group relative overflow-hidden rounded-xl aspect-square shrink-0"
+                      >
+                        <img src={b.cover} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0 opacity-0 transition group-hover:opacity-100">
+                          <div className="absolute inset-0 grid place-items-center"><Play className="h-8 w-8 fill-white text-white" /></div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Column 3 - Scrolls up */}
+                <div className="flex flex-col gap-3">
+                  <div className="animate-scroll-up space-y-3">
+                    {[...beats.slice(12, 18), ...beats.slice(12, 18)].map((b, i) => (
+                      <button 
+                        key={`col3-${i}`} 
+                        onClick={() => play(b, beats.filter((x) => x.id !== b.id))} 
+                        className="group relative overflow-hidden rounded-xl aspect-square shrink-0"
+                      >
+                        <img src={b.cover} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-black/0 opacity-0 transition group-hover:opacity-100">
+                          <div className="absolute inset-0 grid place-items-center"><Play className="h-8 w-8 fill-white text-white" /></div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Fade overlay at top and bottom */}
+              <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-background to-transparent pointer-events-none" />
+              <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-background to-transparent pointer-events-none" />
             </div>
           </div>
         </div>
