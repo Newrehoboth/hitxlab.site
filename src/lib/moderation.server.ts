@@ -422,9 +422,10 @@ async function sendBeatTakedownEmail(params: {
     const resend = new Resend(resendApiKey);
 
     console.log(`[Moderation] Sending beat takedown email to ${producerEmail}...`);
+    console.log(`[Moderation] Using Resend API Key: ${resendApiKey.substring(0, 10)}...`);
 
     const result = await resend.emails.send({
-      from: "HITXLAB Moderation <noreply@hitxlab.com>",
+      from: "HITXLAB Moderation <onboarding@resend.dev>",
       to: producerEmail,
       subject: `⚠️ Beat ${actionText}: ${beatTitle}`,
       html: `
@@ -480,11 +481,14 @@ async function sendBeatTakedownEmail(params: {
       `,
     });
 
-    console.log(`[Moderation] ✅ Beat takedown email sent to ${producerEmail}`, result);
+    console.log(`[Moderation] ✅ Beat takedown email sent to ${producerEmail}`);
+    console.log(`[Moderation] Email result:`, result);
   } catch (err: any) {
     console.error("[Moderation] ❌ Failed to send beat takedown email:", err);
+    console.error("[Moderation] Error message:", err.message);
     console.error("[Moderation] Error details:", JSON.stringify(err, null, 2));
-    // Don't throw - email failure shouldn't block the takedown
+    // Re-throw so we can see the error in the UI
+    throw new Error(`Failed to send email: ${err.message}`);
   }
 }
 
@@ -517,10 +521,19 @@ async function sendUserStrikeEmail(params: {
 
   try {
     const { Resend } = await import("resend");
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const resendApiKey = process.env.RESEND_API_KEY;
+    
+    if (!resendApiKey) {
+      console.error("[Moderation] RESEND_API_KEY not configured for strike email");
+      throw new Error("RESEND_API_KEY not configured");
+    }
+    
+    const resend = new Resend(resendApiKey);
+    
+    console.log(`[Moderation] Sending strike email to ${userEmail}...`);
 
-    await resend.emails.send({
-      from: "HITXLAB Moderation <moderation@hitxlab.com>",
+    const result = await resend.emails.send({
+      from: "HITXLAB Moderation <onboarding@resend.dev>",
       to: userEmail,
       subject: suspended
         ? `🚨 Account Suspended - Strike ${totalStrikes}`
@@ -610,9 +623,12 @@ async function sendUserStrikeEmail(params: {
       `,
     });
 
-    console.log(`[Moderation] Strike email sent to ${userEmail} (suspended: ${suspended})`);
-  } catch (err) {
-    console.error("[Moderation] Failed to send strike email:", err);
-    // Don't throw - email failure shouldn't block the strike
+    console.log(`[Moderation] ✅ Strike email sent to ${userEmail} (suspended: ${suspended})`);
+    console.log(`[Moderation] Email result:`, result);
+  } catch (err: any) {
+    console.error("[Moderation] ❌ Failed to send strike email:", err);
+    console.error("[Moderation] Error message:", err.message);
+    // Re-throw so we can see the error
+    throw new Error(`Failed to send strike email: ${err.message}`);
   }
 }
