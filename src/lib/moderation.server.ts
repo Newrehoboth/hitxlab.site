@@ -173,26 +173,6 @@ export async function takedownBeat(params: {
 
   return result;
 }
-    producerEmail: result.producer_email,
-    producerName: result.user_name,
-    beatTitle: result.beat_title,
-    actionType,
-    reason,
-    customReason,
-    expiresAt,
-  });
-
-  // Mark email as sent
-  await supabaseAdmin
-    .from("beat_moderation_actions")
-    .update({
-      email_sent: true,
-      email_sent_at: new Date().toISOString(),
-    })
-    .eq("id", result.action_id);
-
-  return result;
-}
 
 /** Give a user a strike (auto-suspends at 2+ strikes) */
 export async function giveUserStrike(params: {
