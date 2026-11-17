@@ -26,7 +26,7 @@ export type StrikeReason =
 export type TakedownAction = "takedown_temporary" | "takedown_permanent" | "restore" | "warning";
 export type StrikeType = "warning" | "violation" | "severe_violation";
 
-/** Create in-app notification */
+/** Create in-app notification using database function (bypasses RLS) */
 async function createNotification(params: {
   userId: string;
   title: string;
@@ -37,18 +37,23 @@ async function createNotification(params: {
   try {
     console.log(`[Moderation] Creating notification for user ${params.userId}:`, params.title);
     
-    const { data, error } = await supabaseAdmin.from("notifications").insert({
-      user_id: params.userId,
-      title: params.title,
-      message: params.message,
-      type: params.type,
-      link: params.link || null,
-      is_read: false,
-    }).select();
+    // Use the database function that bypasses RLS
+    const { data, error } = await supabaseAdmin.rpc("create_moderation_notification", {
+      _user_id: params.userId,
+      _title: params.title,
+      _message: params.message,
+      _type: params.type,
+      _link: params.link || null,
+    });
 
     if (error) {
-      console.error("[Moderation] ❌ Notification insert failed:", error);
+      console.error("[Moderation] ❌ Notification RPC failed:", error);
       throw error;
+    }
+
+    if (data && !data.success) {
+      console.error("[Moderation] ❌ Notification creation failed:", data.error);
+      throw new Error(data.error);
     }
 
     console.log("[Moderation] ✅ Notification created successfully:", data);
