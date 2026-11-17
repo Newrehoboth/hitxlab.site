@@ -20,6 +20,29 @@ export type StrikeReason =
 export type TakedownAction = "takedown_temporary" | "takedown_permanent" | "restore" | "warning";
 export type StrikeType = "warning" | "violation" | "severe_violation";
 
+/** Create in-app notification */
+async function createNotification(params: {
+  userId: string;
+  title: string;
+  message: string;
+  type: string;
+  link?: string;
+}) {
+  try {
+    await supabaseAdmin.from("notifications").insert({
+      user_id: params.userId,
+      title: params.title,
+      message: params.message,
+      type: params.type,
+      link: params.link || null,
+      is_read: false,
+    });
+  } catch (err) {
+    console.error("[Moderation] Failed to create notification:", err);
+    // Don't throw - notification failure shouldn't block moderation
+  }
+}
+
 /** Take down a beat (temporarily or permanently) */
 export async function takedownBeat(params: {
   beatId: string;
@@ -32,7 +55,72 @@ export async function takedownBeat(params: {
 }) {
   const { beatId, adminId, actionType, reason, customReason, adminNotes, expiresAt } = params;
 
-  // Call database function
+  // Get beat and producer info first
+  const { data: beat, error: beatError } = await supabaseAdmin
+    .from("beats")
+    .select("*, producer:profiles!beats_producer_id_fkey(id, name, email)")
+    .eq("id", beatId)
+    .single();
+
+  if (beatError || !beat) throw new Error("Beat not found");
+
+  const producerEmail = beat.producer?.email || "";
+  const producerName = beat.producer?.name || "Producer";
+  const producerId = beat.producer_id;
+
+  // If permanent takedown, DELETE the beat
+  if (actionType === "takedown_permanent") {
+    // Delete the beat from database
+    const { error: deleteError } = await supabaseAdmin
+      .from("beats")
+      .delete()
+      .eq("id", beatId);
+
+    if (deleteError) throw new Error(`Failed to delete beat: ${deleteError.message}`);
+
+    // Record the action before deletion
+    await supabaseAdmin.from("beat_moderation_actions").insert({
+      beat_id: beatId,
+      producer_id: producerId,
+      admin_id: adminId,
+      action_type: actionType,
+      reason,
+      custom_reason: customReason || null,
+      admin_notes: adminNotes || null,
+      expires_at: null,
+    });
+
+    // Send email
+    await sendBeatTakedownEmail({
+      producerEmail,
+      producerName,
+      beatTitle: beat.title,
+      actionType,
+      reason,
+      customReason,
+      expiresAt: undefined,
+    });
+
+    // Send in-app notification
+    await createNotification({
+      userId: producerId,
+      title: "Beat Permanently Removed",
+      message: `Your beat "${beat.title}" has been permanently removed from the platform.`,
+      type: "moderation",
+      link: "/producer/dashboard",
+    });
+
+    return {
+      success: true,
+      action: "deleted",
+      beatId,
+      beatTitle: beat.title,
+      producerId,
+      producerEmail,
+    };
+  }
+
+  // For temporary takedown, just hide it
   const { data, error } = await supabaseAdmin.rpc("takedown_beat", {
     _beat_id: beatId,
     _admin_id: adminId,
@@ -48,6 +136,43 @@ export async function takedownBeat(params: {
   // Send email notification
   const result = data as any;
   await sendBeatTakedownEmail({
+    producerEmail,
+    producerName,
+    beatTitle: beat.title,
+    actionType,
+    reason,
+    customReason,
+    expiresAt,
+  });
+
+  // Send in-app notification
+  const notificationMessage =
+    actionType === "takedown_temporary"
+      ? `Your beat "${beat.title}" has been temporarily hidden. ${expiresAt ? `It will be restored on ${new Date(expiresAt).toLocaleDateString()}.` : ""}`
+      : `Your beat "${beat.title}" has been flagged for review.`;
+
+  await createNotification({
+    userId: producerId,
+    title: "Beat Moderation Notice",
+    message: notificationMessage,
+    type: "moderation",
+    link: "/producer/dashboard",
+  });
+
+  // Mark action as complete
+  await supabaseAdmin
+    .from("beat_moderation_actions")
+    .update({
+      email_sent: true,
+      email_sent_at: new Date().toISOString(),
+    })
+    .eq("beat_id", beatId)
+    .eq("admin_id", adminId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  return result;
+}
     producerEmail: result.producer_email,
     producerName: result.user_name,
     beatTitle: result.beat_title,
@@ -81,6 +206,15 @@ export async function giveUserStrike(params: {
 }) {
   const { userId, adminId, strikeType, reason, customReason, adminNotes, relatedBeatId } = params;
 
+  // Get user info
+  const { data: user, error: userError } = await supabaseAdmin
+    .from("profiles")
+    .select("id, name, email")
+    .eq("id", userId)
+    .single();
+
+  if (userError || !user) throw new Error("User not found");
+
   // Call database function
   const { data, error } = await supabaseAdmin.rpc("give_user_strike", {
     _user_id: userId,
@@ -97,13 +231,30 @@ export async function giveUserStrike(params: {
   // Send email notification
   const result = data as any;
   await sendUserStrikeEmail({
-    userEmail: result.user_email,
-    userName: result.user_name,
+    userEmail: user.email || "",
+    userName: user.name || "User",
     strikeType,
     reason,
     customReason,
     totalStrikes: result.total_strikes,
     suspended: result.suspended,
+  });
+
+  // Send in-app notification
+  const notificationTitle = result.suspended
+    ? "Account Suspended"
+    : `Strike ${result.total_strikes}/2 Received`;
+
+  const notificationMessage = result.suspended
+    ? `Your account has been suspended due to multiple violations. Contact support to appeal.`
+    : `You have received a strike. ${result.total_strikes === 1 ? "One more strike will result in suspension." : ""}`;
+
+  await createNotification({
+    userId,
+    title: notificationTitle,
+    message: notificationMessage,
+    type: "moderation",
+    link: "/dashboard",
   });
 
   // Mark email as sent
@@ -221,6 +372,11 @@ async function sendBeatTakedownEmail(params: {
   const { producerEmail, producerName, beatTitle, actionType, reason, customReason, expiresAt } =
     params;
 
+  if (!producerEmail) {
+    console.error("[Moderation] Cannot send email: No producer email provided");
+    return;
+  }
+
   const reasonText = {
     copyright_claim: "Copyright Claim",
     uploaded_music_not_beat: "Uploaded Music Instead of Beat",
@@ -244,10 +400,19 @@ async function sendBeatTakedownEmail(params: {
 
   try {
     const { Resend } = await import("resend");
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const resendApiKey = process.env.RESEND_API_KEY;
+    
+    if (!resendApiKey) {
+      console.error("[Moderation] RESEND_API_KEY not configured");
+      return;
+    }
+    
+    const resend = new Resend(resendApiKey);
 
-    await resend.emails.send({
-      from: "HITXLAB Moderation <moderation@hitxlab.com>",
+    console.log(`[Moderation] Sending beat takedown email to ${producerEmail}...`);
+
+    const result = await resend.emails.send({
+      from: "HITXLAB Moderation <noreply@hitxlab.com>",
       to: producerEmail,
       subject: `⚠️ Beat ${actionText}: ${beatTitle}`,
       html: `
@@ -272,7 +437,7 @@ async function sendBeatTakedownEmail(params: {
             isPermanent
               ? `
           <p style="color: #dc2626; font-weight: bold;">
-            This is a permanent removal. The beat cannot be restored.
+            This is a permanent removal. The beat has been deleted from the platform.
           </p>
           `
               : `
@@ -285,7 +450,7 @@ async function sendBeatTakedownEmail(params: {
             <ul>
               <li>The beat is no longer visible to buyers</li>
               <li>It won't appear in search results or your profile</li>
-              ${!isPermanent ? "<li>You can appeal this decision</li>" : ""}
+              ${!isPermanent ? "<li>You can appeal this decision</li>" : "<li>This action is permanent and cannot be reversed</li>"}
             </ul>
           </div>
           
@@ -303,9 +468,10 @@ async function sendBeatTakedownEmail(params: {
       `,
     });
 
-    console.log(`[Moderation] Beat takedown email sent to ${producerEmail}`);
-  } catch (err) {
-    console.error("[Moderation] Failed to send beat takedown email:", err);
+    console.log(`[Moderation] ✅ Beat takedown email sent to ${producerEmail}`, result);
+  } catch (err: any) {
+    console.error("[Moderation] ❌ Failed to send beat takedown email:", err);
+    console.error("[Moderation] Error details:", JSON.stringify(err, null, 2));
     // Don't throw - email failure shouldn't block the takedown
   }
 }
