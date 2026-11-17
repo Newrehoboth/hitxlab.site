@@ -1,4 +1,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { Resend } from "resend";
+
+// Use the same email configuration as the rest of the platform
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM_EMAIL = "HITXLAB <noreply@hitxlab.com.ng>";
+const SITE_URL = process.env.VITE_SITE_URL || "https://hitxlab.com.ng";
 
 export type ModerationReason =
   | "copyright_claim"
@@ -411,21 +417,11 @@ async function sendBeatTakedownEmail(params: {
     : "";
 
   try {
-    const { Resend } = await import("resend");
-    const resendApiKey = process.env.RESEND_API_KEY;
-    
-    if (!resendApiKey) {
-      console.error("[Moderation] RESEND_API_KEY not configured");
-      return;
-    }
-    
-    const resend = new Resend(resendApiKey);
-
     console.log(`[Moderation] Sending beat takedown email to ${producerEmail}...`);
-    console.log(`[Moderation] Using Resend API Key: ${resendApiKey.substring(0, 10)}...`);
+    console.log(`[Moderation] Using verified platform email: ${FROM_EMAIL}`);
 
     const result = await resend.emails.send({
-      from: "HITXLAB Moderation <onboarding@resend.dev>",
+      from: FROM_EMAIL,
       to: producerEmail,
       subject: `⚠️ Beat ${actionText}: ${beatTitle}`,
       html: `
@@ -467,7 +463,7 @@ async function sendBeatTakedownEmail(params: {
             </ul>
           </div>
           
-          <a href="https://hitxlab.com/producer/dashboard" 
+          <a href="${SITE_URL}/producer/dashboard" 
              style="display: inline-block; background: #ef4444; color: white; 
                     padding: 12px 24px; text-decoration: none; border-radius: 6px; 
                     margin-top: 20px;">
@@ -475,7 +471,8 @@ async function sendBeatTakedownEmail(params: {
           </a>
           
           <p style="margin-top: 30px; color: #999; font-size: 12px;">
-            This is an automated message from HITXLAB Moderation Team.
+            This is an automated message from HITXLAB Moderation Team.<br/>
+            © ${new Date().getFullYear()} HITXLAB · <a href="${SITE_URL}" style="color: #999;">hitxlab.com.ng</a>
           </p>
         </div>
       `,
@@ -520,20 +517,11 @@ async function sendUserStrikeEmail(params: {
   }[strikeType];
 
   try {
-    const { Resend } = await import("resend");
-    const resendApiKey = process.env.RESEND_API_KEY;
-    
-    if (!resendApiKey) {
-      console.error("[Moderation] RESEND_API_KEY not configured for strike email");
-      throw new Error("RESEND_API_KEY not configured");
-    }
-    
-    const resend = new Resend(resendApiKey);
-    
     console.log(`[Moderation] Sending strike email to ${userEmail}...`);
+    console.log(`[Moderation] Using verified platform email: ${FROM_EMAIL}`);
 
     const result = await resend.emails.send({
-      from: "HITXLAB Moderation <onboarding@resend.dev>",
+      from: FROM_EMAIL,
       to: userEmail,
       subject: suspended
         ? `🚨 Account Suspended - Strike ${totalStrikes}`
@@ -603,13 +591,13 @@ async function sendUserStrikeEmail(params: {
           <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
             <h3>What to do next:</h3>
             <ul>
-              <li>Review our <a href="https://hitxlab.com/terms">Terms of Service</a></li>
-              <li>Read our <a href="https://hitxlab.com/community-guidelines">Community Guidelines</a></li>
+              <li>Review our <a href="${SITE_URL}/terms">Terms of Service</a></li>
+              <li>Read our <a href="${SITE_URL}/community-guidelines">Community Guidelines</a></li>
               <li>Contact support if you believe this is an error</li>
             </ul>
           </div>
           
-          <a href="https://hitxlab.com/support" 
+          <a href="${SITE_URL}/support" 
              style="display: inline-block; background: #ef4444; color: white; 
                     padding: 12px 24px; text-decoration: none; border-radius: 6px; 
                     margin-top: 20px;">
@@ -617,7 +605,8 @@ async function sendUserStrikeEmail(params: {
           </a>
           
           <p style="margin-top: 30px; color: #999; font-size: 12px;">
-            This is an automated message from HITXLAB Moderation Team.
+            This is an automated message from HITXLAB Moderation Team.<br/>
+            © ${new Date().getFullYear()} HITXLAB · <a href="${SITE_URL}" style="color: #999;">hitxlab.com.ng</a>
           </p>
         </div>
       `,
