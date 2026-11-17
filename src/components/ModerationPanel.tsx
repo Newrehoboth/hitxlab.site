@@ -82,7 +82,14 @@ export function TakedownBeatModal({
           ? new Date(Date.now() + Number(expiryDays) * 24 * 60 * 60 * 1000).toISOString()
           : undefined;
 
-      await takedownBeat({
+      console.log("[Takedown] Submitting:", {
+        beatId: beat.id,
+        actionType,
+        reason,
+        expiresAt,
+      });
+
+      const result = await takedownBeat({
         data: {
           beatId: beat.id,
           actionType,
@@ -93,11 +100,24 @@ export function TakedownBeatModal({
         },
       });
 
-      alert("✅ Beat taken down successfully! Email sent to producer.");
+      console.log("[Takedown] Success:", result);
+
+      const isPermanent = actionType === "takedown_permanent";
+      alert(
+        isPermanent
+          ? "✅ Beat permanently deleted! Email sent to producer."
+          : "✅ Beat taken down successfully! Email sent to producer."
+      );
+      
       onSuccess();
       onClose();
     } catch (err: any) {
-      alert(`❌ Error: ${err.message}`);
+      console.error("[Takedown] Error:", err);
+      alert(`❌ Error: ${err.message || "Takedown failed"}`);
+    } finally {
+      setLoading(false);
+    }
+  };
     } finally {
       setLoading(false);
     }
