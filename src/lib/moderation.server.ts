@@ -58,15 +58,38 @@ export async function takedownBeat(params: {
   // Get beat and producer info first
   const { data: beat, error: beatError } = await supabaseAdmin
     .from("beats")
-    .select("*, producer:profiles!beats_producer_id_fkey(id, name, email)")
+    .select("id, title, producer_id")
     .eq("id", beatId)
     .single();
 
-  if (beatError || !beat) throw new Error("Beat not found");
+  if (beatError || !beat) {
+    console.error("[Moderation] Beat not found:", beatError);
+    throw new Error("Beat not found");
+  }
 
-  const producerEmail = beat.producer?.email || "";
-  const producerName = beat.producer?.name || "Producer";
+  // Get producer info
+  const { data: producer, error: producerError } = await supabaseAdmin
+    .from("profiles")
+    .select("id, name, email")
+    .eq("id", beat.producer_id)
+    .single();
+
+  if (producerError || !producer) {
+    console.error("[Moderation] Producer not found:", producerError);
+    throw new Error("Producer not found");
+  }
+
+  const producerEmail = producer.email || "";
+  const producerName = producer.name || "Producer";
   const producerId = beat.producer_id;
+
+  console.log("[Moderation] Taking down beat:", {
+    beatId,
+    beatTitle: beat.title,
+    producerId,
+    producerEmail,
+    actionType,
+  });
 
   // If permanent takedown, DELETE the beat
   if (actionType === "takedown_permanent") {
@@ -76,7 +99,12 @@ export async function takedownBeat(params: {
       .delete()
       .eq("id", beatId);
 
-    if (deleteError) throw new Error(`Failed to delete beat: ${deleteError.message}`);
+    if (deleteError) {
+      console.error("[Moderation] Failed to delete beat:", deleteError);
+      throw new Error(`Failed to delete beat: ${deleteError.message}`);
+    }
+
+    console.log("[Moderation] ✅ Beat deleted from database");
 
     // Record the action before deletion
     await supabaseAdmin.from("beat_moderation_actions").insert({
@@ -131,10 +159,14 @@ export async function takedownBeat(params: {
     _expires_at: expiresAt || null,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[Moderation] Takedown RPC failed:", error);
+    throw new Error(error.message);
+  }
+
+  console.log("[Moderation] ✅ Beat taken down temporarily");
 
   // Send email notification
-  const result = data as any;
   await sendBeatTakedownEmail({
     producerEmail,
     producerName,
@@ -171,7 +203,7 @@ export async function takedownBeat(params: {
     .order("created_at", { ascending: false })
     .limit(1);
 
-  return result;
+  return data;
 }
 
 /** Give a user a strike (auto-suspends at 2+ strikes) */
