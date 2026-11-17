@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Bell, Heart, UserPlus, CheckCheck } from "lucide-react";
+import { Bell, Heart, UserPlus, CheckCheck, ShieldAlert, Ban, AlertTriangle } from "lucide-react";
 import { useNotifications } from "@/lib/engagement";
 
 function timeAgo(iso: string) {
@@ -55,14 +55,24 @@ export function NotificationsPanel() {
         ) : (
           <ul className="divide-y divide-white/5">
             {items.map((n) => {
-              const Icon = n.type === "like" ? Heart : UserPlus;
+              // Determine icon and color based on notification type
+              let Icon = Bell;
+              let colorClass = "bg-gray-500/15 text-gray-400";
+              
+              if (n.type === "like") {
+                Icon = Heart;
+                colorClass = "bg-red-500/15 text-red-400";
+              } else if (n.type === "follow") {
+                Icon = UserPlus;
+                colorClass = "bg-teal/15 text-teal";
+              } else if (n.type === "moderation") {
+                Icon = ShieldAlert;
+                colorClass = "bg-yellow-500/15 text-yellow-400";
+              }
+              
               const body = (
                 <div className="flex items-start gap-3 px-4 py-4 sm:px-5">
-                  <span
-                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
-                      n.type === "like" ? "bg-red-500/15 text-red-400" : "bg-teal/15 text-teal"
-                    }`}
-                  >
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${colorClass}`}>
                     <Icon className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">

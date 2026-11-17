@@ -35,17 +35,29 @@ async function createNotification(params: {
   link?: string;
 }) {
   try {
-    await supabaseAdmin.from("notifications").insert({
+    console.log(`[Moderation] Creating notification for user ${params.userId}:`, params.title);
+    
+    const { data, error } = await supabaseAdmin.from("notifications").insert({
       user_id: params.userId,
       title: params.title,
       message: params.message,
       type: params.type,
       link: params.link || null,
       is_read: false,
-    });
-  } catch (err) {
-    console.error("[Moderation] Failed to create notification:", err);
+    }).select();
+
+    if (error) {
+      console.error("[Moderation] ❌ Notification insert failed:", error);
+      throw error;
+    }
+
+    console.log("[Moderation] ✅ Notification created successfully:", data);
+    return data;
+  } catch (err: any) {
+    console.error("[Moderation] ❌ Failed to create notification:", err);
+    console.error("[Moderation] Error details:", JSON.stringify(err, null, 2));
     // Don't throw - notification failure shouldn't block moderation
+    return null;
   }
 }
 
@@ -99,50 +111,59 @@ export async function takedownBeat(params: {
 
   // If permanent takedown, DELETE the beat
   if (actionType === "takedown_permanent") {
-    // Delete the beat from database
-    const { error: deleteError } = await supabaseAdmin
-      .from("beats")
-      .delete()
-      .eq("id", beatId);
+    console.log("[Moderation] 🔥 PERMANENT DELETE requested for beat:", beatId);
+    
+    try {
+      // Use the dedicated permanent delete function that bypasses RLS
+      const { data: deleteResult, error: deleteError } = await supabaseAdmin
+        .rpc("permanently_delete_beat", {
+          _beat_id: beatId,
+          _admin_id: adminId,
+          _reason: reason,
+          _custom_reason: customReason || null,
+          _admin_notes: adminNotes || null,
+        });
 
-    if (deleteError) {
-      console.error("[Moderation] Failed to delete beat:", deleteError);
-      throw new Error(`Failed to delete beat: ${deleteError.message}`);
+      if (deleteError) {
+        console.error("[Moderation] ❌ Permanent delete RPC failed:", deleteError);
+        throw new Error(`Failed to delete beat: ${deleteError.message}`);
+      }
+
+      console.log("[Moderation] ✅ Beat PERMANENTLY DELETED from database:", deleteResult);
+    } catch (err: any) {
+      console.error("[Moderation] ❌ Delete operation failed:", err);
+      throw new Error(`Delete failed: ${err.message}`);
     }
 
-    console.log("[Moderation] ✅ Beat deleted from database");
-
-    // Record the action before deletion
-    await supabaseAdmin.from("beat_moderation_actions").insert({
-      beat_id: beatId,
-      producer_id: producerId,
-      admin_id: adminId,
-      action_type: actionType,
-      reason,
-      custom_reason: customReason || null,
-      admin_notes: adminNotes || null,
-      expires_at: null,
-    });
-
     // Send email
-    await sendBeatTakedownEmail({
-      producerEmail,
-      producerName,
-      beatTitle: beat.title,
-      actionType,
-      reason,
-      customReason,
-      expiresAt: undefined,
-    });
+    try {
+      await sendBeatTakedownEmail({
+        producerEmail,
+        producerName,
+        beatTitle: beat.title,
+        actionType,
+        reason,
+        customReason,
+        expiresAt: undefined,
+      });
+      console.log("[Moderation] ✅ Permanent deletion email sent");
+    } catch (emailErr: any) {
+      console.error("[Moderation] ⚠️ Email failed but beat was deleted:", emailErr);
+    }
 
     // Send in-app notification
-    await createNotification({
-      userId: producerId,
-      title: "Beat Permanently Removed",
-      message: `Your beat "${beat.title}" has been permanently removed from the platform.`,
-      type: "moderation",
-      link: "/producer/dashboard",
-    });
+    try {
+      await createNotification({
+        userId: producerId,
+        title: "Beat Permanently Removed",
+        message: `Your beat "${beat.title}" has been permanently removed from the platform.`,
+        type: "moderation",
+        link: "/producer/dashboard",
+      });
+      console.log("[Moderation] ✅ Notification created for producer");
+    } catch (notifErr: any) {
+      console.error("[Moderation] ⚠️ Notification failed:", notifErr);
+    }
 
     return {
       success: true,
