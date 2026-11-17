@@ -1,0 +1,440 @@
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+
+export type ModerationReason =
+  | "copyright_claim"
+  | "uploaded_music_not_beat"
+  | "inappropriate_content"
+  | "spam"
+  | "terms_violation"
+  | "other";
+
+export type StrikeReason =
+  | "copyright_violation"
+  | "uploaded_music_instead_of_beat"
+  | "inappropriate_content"
+  | "spam"
+  | "terms_violation"
+  | "multiple_violations"
+  | "other";
+
+export type TakedownAction = "takedown_temporary" | "takedown_permanent" | "restore" | "warning";
+export type StrikeType = "warning" | "violation" | "severe_violation";
+
+/** Take down a beat (temporarily or permanently) */
+export async function takedownBeat(params: {
+  beatId: string;
+  adminId: string;
+  actionType: TakedownAction;
+  reason: ModerationReason;
+  customReason?: string;
+  adminNotes?: string;
+  expiresAt?: string; // ISO date for temporary takedowns
+}) {
+  const { beatId, adminId, actionType, reason, customReason, adminNotes, expiresAt } = params;
+
+  // Call database function
+  const { data, error } = await supabaseAdmin.rpc("takedown_beat", {
+    _beat_id: beatId,
+    _admin_id: adminId,
+    _action_type: actionType,
+    _reason: reason,
+    _custom_reason: customReason || null,
+    _admin_notes: adminNotes || null,
+    _expires_at: expiresAt || null,
+  });
+
+  if (error) throw new Error(error.message);
+
+  // Send email notification
+  const result = data as any;
+  await sendBeatTakedownEmail({
+    producerEmail: result.producer_email,
+    producerName: result.user_name,
+    beatTitle: result.beat_title,
+    actionType,
+    reason,
+    customReason,
+    expiresAt,
+  });
+
+  // Mark email as sent
+  await supabaseAdmin
+    .from("beat_moderation_actions")
+    .update({
+      email_sent: true,
+      email_sent_at: new Date().toISOString(),
+    })
+    .eq("id", result.action_id);
+
+  return result;
+}
+
+/** Give a user a strike (auto-suspends at 2+ strikes) */
+export async function giveUserStrike(params: {
+  userId: string;
+  adminId: string;
+  strikeType: StrikeType;
+  reason: StrikeReason;
+  customReason?: string;
+  adminNotes?: string;
+  relatedBeatId?: string;
+}) {
+  const { userId, adminId, strikeType, reason, customReason, adminNotes, relatedBeatId } = params;
+
+  // Call database function
+  const { data, error } = await supabaseAdmin.rpc("give_user_strike", {
+    _user_id: userId,
+    _admin_id: adminId,
+    _strike_type: strikeType,
+    _reason: reason,
+    _custom_reason: customReason || null,
+    _admin_notes: adminNotes || null,
+    _related_beat_id: relatedBeatId || null,
+  });
+
+  if (error) throw new Error(error.message);
+
+  // Send email notification
+  const result = data as any;
+  await sendUserStrikeEmail({
+    userEmail: result.user_email,
+    userName: result.user_name,
+    strikeType,
+    reason,
+    customReason,
+    totalStrikes: result.total_strikes,
+    suspended: result.suspended,
+  });
+
+  // Mark email as sent
+  await supabaseAdmin
+    .from("user_strikes")
+    .update({
+      email_sent: true,
+      email_sent_at: new Date().toISOString(),
+    })
+    .eq("id", result.strike_id);
+
+  return result;
+}
+
+/** Get user's moderation summary */
+export async function getUserModerationSummary(userId: string) {
+  const { data, error } = await supabaseAdmin.rpc("get_user_moderation_summary", {
+    _user_id: userId,
+  });
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** Get all moderation actions for admin dashboard */
+export async function getAllModerationActions() {
+  const [beatActions, userStrikes, activityLog] = await Promise.all([
+    supabaseAdmin
+      .from("beat_moderation_actions")
+      .select(
+        `
+        *,
+        beat:beats(title, cover_url),
+        producer:profiles!beat_moderation_actions_producer_id_fkey(name, email),
+        admin:profiles!beat_moderation_actions_admin_id_fkey(name, email)
+      `,
+      )
+      .order("created_at", { ascending: false })
+      .limit(50),
+
+    supabaseAdmin
+      .from("user_strikes")
+      .select(
+        `
+        *,
+        user:profiles!user_strikes_user_id_fkey(name, email, total_strikes, is_suspended),
+        admin:profiles!user_strikes_admin_id_fkey(name, email)
+      `,
+      )
+      .order("created_at", { ascending: false })
+      .limit(50),
+
+    supabaseAdmin
+      .from("moderation_activity_log")
+      .select("*, admin:profiles!moderation_activity_log_admin_id_fkey(name, email)")
+      .order("created_at", { ascending: false })
+      .limit(100),
+  ]);
+
+  return {
+    beatActions: beatActions.data || [],
+    userStrikes: userStrikes.data || [],
+    activityLog: activityLog.data || [],
+  };
+}
+
+/** Get beats that are taken down */
+export async function getTakenDownBeats() {
+  const { data, error } = await supabaseAdmin
+    .from("beats")
+    .select(
+      `
+      *,
+      producer:profiles!beats_producer_id_fkey(name, email, username),
+      moderation_actions:beat_moderation_actions(*)
+    `,
+    )
+    .in("moderation_status", ["taken_down_temporary", "taken_down_permanent"])
+    .order("taken_down_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+/** Get users with strikes */
+export async function getUsersWithStrikes() {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select(
+      `
+      *,
+      strikes:user_strikes(*)
+    `,
+    )
+    .gt("active_strikes", 0)
+    .order("active_strikes", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EMAIL NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function sendBeatTakedownEmail(params: {
+  producerEmail: string;
+  producerName: string;
+  beatTitle: string;
+  actionType: TakedownAction;
+  reason: ModerationReason;
+  customReason?: string;
+  expiresAt?: string;
+}) {
+  const { producerEmail, producerName, beatTitle, actionType, reason, customReason, expiresAt } =
+    params;
+
+  const reasonText = {
+    copyright_claim: "Copyright Claim",
+    uploaded_music_not_beat: "Uploaded Music Instead of Beat",
+    inappropriate_content: "Inappropriate Content",
+    spam: "Spam",
+    terms_violation: "Terms of Service Violation",
+    other: "Other",
+  }[reason];
+
+  const actionText = {
+    takedown_temporary: "Temporarily Taken Down",
+    takedown_permanent: "Permanently Removed",
+    restore: "Restored",
+    warning: "Under Review",
+  }[actionType];
+
+  const isPermanent = actionType === "takedown_permanent";
+  const expiryText = expiresAt
+    ? `This takedown will expire on ${new Date(expiresAt).toLocaleDateString()}.`
+    : "";
+
+  try {
+    const { Resend } = await import("resend");
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    await resend.emails.send({
+      from: "HITXLAB Moderation <moderation@hitxlab.com>",
+      to: producerEmail,
+      subject: `⚠️ Beat ${actionText}: ${beatTitle}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: #fee; border-left: 4px solid #ef4444; padding: 20px; margin-bottom: 20px;">
+            <h2 style="color: #dc2626; margin: 0;">Content Moderation Notice</h2>
+          </div>
+          
+          <p>Hello ${producerName},</p>
+          
+          <p>Your beat <strong>"${beatTitle}"</strong> has been <strong>${actionText.toLowerCase()}</strong> by our moderation team.</p>
+          
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0;">Reason</h3>
+            <p style="margin: 5px 0;"><strong>${reasonText}</strong></p>
+            ${customReason ? `<p style="color: #666;">${customReason}</p>` : ""}
+          </div>
+          
+          ${expiryText ? `<p style="color: #666;">${expiryText}</p>` : ""}
+          
+          ${
+            isPermanent
+              ? `
+          <p style="color: #dc2626; font-weight: bold;">
+            This is a permanent removal. The beat cannot be restored.
+          </p>
+          `
+              : `
+          <p>If you believe this was done in error, please contact our support team.</p>
+          `
+          }
+          
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 14px;">
+            <p><strong>What this means:</strong></p>
+            <ul>
+              <li>The beat is no longer visible to buyers</li>
+              <li>It won't appear in search results or your profile</li>
+              ${!isPermanent ? "<li>You can appeal this decision</li>" : ""}
+            </ul>
+          </div>
+          
+          <a href="https://hitxlab.com/producer/dashboard" 
+             style="display: inline-block; background: #ef4444; color: white; 
+                    padding: 12px 24px; text-decoration: none; border-radius: 6px; 
+                    margin-top: 20px;">
+            View Dashboard
+          </a>
+          
+          <p style="margin-top: 30px; color: #999; font-size: 12px;">
+            This is an automated message from HITXLAB Moderation Team.
+          </p>
+        </div>
+      `,
+    });
+
+    console.log(`[Moderation] Beat takedown email sent to ${producerEmail}`);
+  } catch (err) {
+    console.error("[Moderation] Failed to send beat takedown email:", err);
+    // Don't throw - email failure shouldn't block the takedown
+  }
+}
+
+async function sendUserStrikeEmail(params: {
+  userEmail: string;
+  userName: string;
+  strikeType: StrikeType;
+  reason: StrikeReason;
+  customReason?: string;
+  totalStrikes: number;
+  suspended: boolean;
+}) {
+  const { userEmail, userName, strikeType, reason, customReason, totalStrikes, suspended } = params;
+
+  const reasonText = {
+    copyright_violation: "Copyright Violation",
+    uploaded_music_instead_of_beat: "Uploaded Music Instead of Beat",
+    inappropriate_content: "Inappropriate Content",
+    spam: "Spam",
+    terms_violation: "Terms of Service Violation",
+    multiple_violations: "Multiple Violations",
+    other: "Other",
+  }[reason];
+
+  const strikeTypeText = {
+    warning: "Warning",
+    violation: "Violation",
+    severe_violation: "Severe Violation",
+  }[strikeType];
+
+  try {
+    const { Resend } = await import("resend");
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    await resend.emails.send({
+      from: "HITXLAB Moderation <moderation@hitxlab.com>",
+      to: userEmail,
+      subject: suspended
+        ? `🚨 Account Suspended - Strike ${totalStrikes}`
+        : `⚠️ Strike ${totalStrikes}/2 - ${strikeTypeText}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: ${suspended ? "#dc2626" : "#f59e0b"}; color: white; padding: 20px; margin-bottom: 20px;">
+            <h2 style="margin: 0;">${suspended ? "🚨 Account Suspended" : `⚠️ Strike ${totalStrikes}/2`}</h2>
+          </div>
+          
+          <p>Hello ${userName},</p>
+          
+          ${
+            suspended
+              ? `
+          <p style="font-size: 18px; color: #dc2626; font-weight: bold;">
+            Your account has been suspended due to multiple strikes.
+          </p>
+          `
+              : `
+          <p>Your account has received a <strong>${strikeTypeText}</strong>.</p>
+          `
+          }
+          
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0;">Reason</h3>
+            <p style="margin: 5px 0;"><strong>${reasonText}</strong></p>
+            ${customReason ? `<p style="color: #666;">${customReason}</p>` : ""}
+          </div>
+          
+          <div style="background: ${suspended ? "#fee" : "#fef3c7"}; border-left: 4px solid ${suspended ? "#ef4444" : "#f59e0b"}; padding: 15px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: ${suspended ? "#dc2626" : "#d97706"};">
+              Strike Status: ${totalStrikes} / 2
+            </h3>
+            <ul style="margin: 10px 0;">
+              <li><strong>Strike 1:</strong> Warning - Account under close watch</li>
+              <li><strong>Strike 2:</strong> Suspension - Account disabled until further notice</li>
+            </ul>
+          </div>
+          
+          ${
+            suspended
+              ? `
+          <div style="background: #fee; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #dc2626; margin-top: 0;">Account Suspended</h3>
+            <p>Your account is now suspended. You cannot:</p>
+            <ul>
+              <li>Upload new beats</li>
+              <li>Edit existing beats</li>
+              <li>Receive earnings</li>
+              <li>Access producer features</li>
+            </ul>
+            <p style="font-weight: bold; margin-top: 15px;">
+              To appeal this suspension, contact our support team immediately.
+            </p>
+          </div>
+          `
+              : `
+          <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #d97706; margin-top: 0;">⚠️ Warning</h3>
+            <p><strong>One more strike will result in account suspension.</strong></p>
+            <p>Please ensure you follow our Community Guidelines and Terms of Service.</p>
+          </div>
+          `
+          }
+          
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+            <h3>What to do next:</h3>
+            <ul>
+              <li>Review our <a href="https://hitxlab.com/terms">Terms of Service</a></li>
+              <li>Read our <a href="https://hitxlab.com/community-guidelines">Community Guidelines</a></li>
+              <li>Contact support if you believe this is an error</li>
+            </ul>
+          </div>
+          
+          <a href="https://hitxlab.com/support" 
+             style="display: inline-block; background: #ef4444; color: white; 
+                    padding: 12px 24px; text-decoration: none; border-radius: 6px; 
+                    margin-top: 20px;">
+            Contact Support
+          </a>
+          
+          <p style="margin-top: 30px; color: #999; font-size: 12px;">
+            This is an automated message from HITXLAB Moderation Team.
+          </p>
+        </div>
+      `,
+    });
+
+    console.log(`[Moderation] Strike email sent to ${userEmail} (suspended: ${suspended})`);
+  } catch (err) {
+    console.error("[Moderation] Failed to send strike email:", err);
+    // Don't throw - email failure shouldn't block the strike
+  }
+}

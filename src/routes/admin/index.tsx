@@ -34,6 +34,7 @@ import {
   GraduationCap,
   Phone,
   MapPin,
+  Ban,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { useAuth } from "@/lib/store";
@@ -45,6 +46,7 @@ import {
   adminToggleSuspendUserFn,
   adminDeleteUserFn,
 } from "@/lib/payouts.functions";
+import { TakedownBeatModal, GiveStrikeModal } from "@/components/ModerationPanel";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({
@@ -82,6 +84,10 @@ function AdminDashboard() {
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState<"all" | "producer" | "artist">("all");
+
+  // Moderation State
+  const [selectedBeatForTakedown, setSelectedBeatForTakedown] = useState<any>(null);
+  const [selectedUserForStrike, setSelectedUserForStrike] = useState<any>(null);
 
   const isAdmin = useMemo(() => {
     if (!user) return false;
@@ -685,6 +691,7 @@ function AdminDashboard() {
                         <th className="pb-3 font-semibold">Price</th>
                         <th className="pb-3 font-semibold">Plays</th>
                         <th className="pb-3 font-semibold">Link</th>
+                        <th className="pb-3 font-semibold">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -703,6 +710,32 @@ function AdminDashboard() {
                             <Link to={`/beat/${b.id}`} className="text-red-500 hover:underline flex items-center gap-1">
                               View <ExternalLink className="h-3 w-3" />
                             </Link>
+                          </td>
+                          <td className="py-3">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedBeatForTakedown(b)}
+                                className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold text-red-500 hover:bg-red-500/20 transition"
+                              >
+                                <Ban className="h-3 w-3" />
+                                Takedown
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const producerProfile = data.producerProfiles?.find((p: any) => p.user_id === b.producer_id);
+                                  const userProfile = data.users?.find((u: any) => u.id === b.producer_id);
+                                  setSelectedUserForStrike({
+                                    id: b.producer_id,
+                                    name: producerProfile?.producer_name || userProfile?.name || 'Producer',
+                                    email: userProfile?.email || '',
+                                  });
+                                }}
+                                className="flex items-center gap-1 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1 text-[10px] font-bold text-yellow-500 hover:bg-yellow-500/20 transition"
+                              >
+                                <ShieldAlert className="h-3 w-3" />
+                                Strike
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -943,6 +976,30 @@ function AdminDashboard() {
           </div>
         )}
       </main>
+
+      {/* Moderation Modals */}
+      {selectedBeatForTakedown && (
+        <TakedownBeatModal
+          beat={selectedBeatForTakedown}
+          onClose={() => setSelectedBeatForTakedown(null)}
+          onSuccess={() => {
+            setSelectedBeatForTakedown(null);
+            refreshData();
+          }}
+        />
+      )}
+
+      {selectedUserForStrike && (
+        <GiveStrikeModal
+          user={selectedUserForStrike}
+          relatedBeatId={undefined}
+          onClose={() => setSelectedUserForStrike(null)}
+          onSuccess={() => {
+            setSelectedUserForStrike(null);
+            refreshData();
+          }}
+        />
+      )}
     </div>
   );
 }
